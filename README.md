@@ -1,6 +1,8 @@
-# SensibleFox
+<img src="screenshots/clean.png" alt="SensibleFox default UI" width="70%" align=center/>
+<div align=center><h1>SensibleFox</h1></div>
+<hr/>
 
-SensibleFox is an opinionated, zero config Firefox build for MacOS. It's philosophy is to remove as much as possible whilst keeping all core features intact. It prioritizes speed and usability over privacy paranoia, with a focus on a clean, beautiful, and intentionally Firefox experience. All features that are removed should always be able to be turned back on. Nothing is gone or broken, but the defaults are far more usable.
+SensibleFox is an opinionated, zero config Firefox build for MacOS ([See comparison](screenshots/comparison.md)). It's philosophy is to remove as much as possible whilst keeping all core features intact. It prioritizes speed and usability over privacy paranoia, with a focus on a clean, beautiful, and intentionally Firefox experience. All features that are removed should always be able to be turned back on. Nothing is gone or broken, but the defaults are far more usable.
 
 ## Removes:
 
