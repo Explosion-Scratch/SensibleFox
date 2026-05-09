@@ -11,7 +11,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-09 16:19:03
+// Generated: 2026-05-09 17:00:17
 
 
 // ═══════════════════════════════════════════
@@ -2958,7 +2958,44 @@ defaultPref("browser.tabs.allow_transparent_browser", true);
 defaultPref("layers.acceleration.force-enabled", true);
 defaultPref("gfx.webrender.all", true);
 defaultPref("gfx.webrender.quality.force-subpixel-aa-where-possible", true);
+defaultPref("gfx.webrender.precache-shaders", true);
+defaultPref("gfx.webrender.compositor.force-enabled", true);
+defaultPref("gfx.webrender.layer-compositor", true);
+defaultPref("gfx.canvas.accelerated.cache-items", 4096);
+defaultPref("gfx.canvas.accelerated.cache-size", 512);
+defaultPref("webgl.max-size", 16384);
+defaultPref("webgl.force-enabled", true);
+defaultPref("layers.gpu-process.force-enabled", true);
+defaultPref("media.hardware-video-decoding.force-enabled", true);
 defaultPref("image.jxl.enabled", true);
+
+// ═══════════════════════════════════════════
+// FASTFOX — curated speed tweaks (Betterfox/Fastfox)
+// ═══════════════════════════════════════════
+defaultPref("nglayout.initialpaint.delay", 0);
+defaultPref("nglayout.initialpaint.delay_in_oopif", 0);
+defaultPref("content.notify.interval", 100000);
+defaultPref("browser.cache.jsbc_compression_level", 3);
+defaultPref("browser.cache.disk.metadata_memory_limit", 16384);
+defaultPref("browser.cache.memory.capacity", 131072);
+defaultPref("browser.cache.memory.max_entry_size", 20480);
+defaultPref("media.memory_caches_combined_limit_kb", 1048576);
+defaultPref("media.cache_readahead_limit", 600);
+defaultPref("media.cache_resume_threshold", 300);
+defaultPref("image.cache.size", 10485760);
+defaultPref("image.mem.decode_bytes_at_a_time", 65536);
+defaultPref("network.buffer.cache.size", 65535);
+defaultPref("network.buffer.cache.count", 48);
+defaultPref("network.http.max-connections", 1800);
+defaultPref("network.http.max-persistent-connections-per-server", 10);
+defaultPref("network.http.max-urgent-start-excessive-connections-per-host", 5);
+defaultPref("network.http.pacing.requests.enabled", false);
+defaultPref("network.dnsCacheEntries", 10000);
+defaultPref("network.dnsCacheExpiration", 3600);
+defaultPref("network.dnsCacheExpirationGracePeriod", 120);
+defaultPref("network.ssl_tokens_cache_capacity", 10240);
+defaultPref("browser.tabs.min_inactive_duration_before_unload", 300000);
+defaultPref("dom.ipc.processPrelaunch.fission.number", 1);
 
 // ═══════════════════════════════════════════
 // PRIVACY — strict tracking protection
@@ -2999,6 +3036,7 @@ defaultPref("browser.urlbar.suggest.topsites", false);
 defaultPref("browser.urlbar.suggest.calculator", true);
 defaultPref("browser.urlbar.unitConversion.enabled", true);
 defaultPref("browser.urlbar.trending.featureGate", false);
+defaultPref("browser.search.hiddenOneOffs", "Amazon.com,eBay,Perplexity");
 defaultPref("browser.urlbar.scotchBonnet.enableOverride", false);
 defaultPref("browser.tabs.tabmanager.enabled", false);
 
@@ -3071,6 +3109,72 @@ defaultPref("browser.newtabpage.activity-stream.improvesearch.topSiteSearchShort
 defaultPref("browser.newtabpage.activity-stream.feeds.section.topstories", false);
 defaultPref("browser.newtabpage.activity-stream.feeds.section.highlights", false);
 defaultPref("browser.newtabpage.activity-stream.feeds.snippets", false);
+
+// ═══════════════════════════════════════════
+// EXTENSION SIGNATURES — allow unsigned add-ons
+// (effective via autoconfig/sensiblefox.cfg in stable Firefox)
+// ═══════════════════════════════════════════
+defaultPref("xpinstall.signatures.required", false);
+defaultPref("xpinstall.whitelist.required", false);
+defaultPref("extensions.langpacks.signatures.required", false);
+defaultPref("extensions.experiments.enabled", true);
+defaultPref("extensions.install.requireBuiltInCerts", false);
+defaultPref("extensions.update.requireBuiltInCerts", false);
+
+// ═══════════════════════════════════════════
+// REFERRER POLICY — strict-origin-when-cross-origin (Firefox default)
+// • cross-origin: scheme+host+port only (no path/query)
+// • same-origin:  full referrer
+// • never spoof — sites use it for legitimate auth flows
+// ═══════════════════════════════════════════
+defaultPref("network.http.sendRefererHeader", 2);
+defaultPref("network.http.referer.spoofSource", false);
+defaultPref("network.http.referer.XOriginPolicy", 0);
+defaultPref("network.http.referer.XOriginTrimmingPolicy", 2);
+defaultPref("network.http.referer.trimmingPolicy", 0);
+defaultPref("network.http.referer.defaultPolicy", 2);
+defaultPref("network.http.referer.defaultPolicy.pbmode", 2);
+defaultPref("network.http.referer.disallowCrossSiteRelaxingDefault", true);
+defaultPref("network.http.referer.hideOnionSource", true);
+
+// ═══════════════════════════════════════════
+// TRACKING — modern signals, sensible defaults
+// ═══════════════════════════════════════════
+defaultPref("privacy.globalprivacycontrol.enabled", true);
+defaultPref("privacy.globalprivacycontrol.functionality.enabled", true);
+defaultPref("privacy.globalprivacycontrol.pbmode.enabled", true);
+defaultPref("privacy.donottrackheader.enabled", true);
+defaultPref("privacy.fingerprintingProtection", true);
+defaultPref("privacy.query_stripping.enabled", true);
+defaultPref("privacy.query_stripping.enabled.pbmode", true);
+
+// ═══════════════════════════════════════════
+// WARNING BYPASS — keep safety nets, but never block the user
+// detection stays ON; the user can always click through.
+// ═══════════════════════════════════════════
+defaultPref("browser.safebrowsing.allowOverride", true);
+defaultPref("browser.safebrowsing.malware.enabled", true);
+defaultPref("browser.safebrowsing.phishing.enabled", true);
+defaultPref("browser.safebrowsing.blockedURIs.enabled", true);
+defaultPref("browser.safebrowsing.downloads.enabled", true);
+defaultPref("security.warn_entering_weak", false);
+defaultPref("security.warn_entering_weak.show_once", false);
+defaultPref("security.warn_leaving_secure", false);
+defaultPref("security.warn_leaving_secure.show_once", false);
+defaultPref("security.warn_submit_insecure", false);
+defaultPref("security.warn_submit_secure_to_insecure", false);
+defaultPref("security.warn_viewing_mixed", false);
+defaultPref("security.warn_viewing_mixed.show_once", false);
+defaultPref("security.mixed_content.block_active_content", false);
+defaultPref("security.mixed_content.block_display_content", false);
+defaultPref("security.insecure_connection_text.enabled", false);
+defaultPref("security.insecure_connection_text.pbmode.enabled", false);
+defaultPref("network.protocol-handler.warn-external-default", false);
+defaultPref("browser.tabs.warnOnCloseOtherTabs", false);
+defaultPref("browser.tabs.warnOnOpen", false);
+defaultPref("browser.sessionstore.warnOnQuit", false);
+defaultPref("general.warnOnAboutConfig", false);
+defaultPref("browser.aboutConfig.showWarning", false);
 
 // ═══════════════════════════════════════════
 // CUSTOMIZATION ENABLEMENT — userChrome, SVG, toolbar layout

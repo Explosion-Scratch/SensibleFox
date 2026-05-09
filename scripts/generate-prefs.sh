@@ -222,7 +222,44 @@ user_pref("browser.tabs.allow_transparent_browser", true);
 user_pref("layers.acceleration.force-enabled", true);
 user_pref("gfx.webrender.all", true);
 user_pref("gfx.webrender.quality.force-subpixel-aa-where-possible", true);
+user_pref("gfx.webrender.precache-shaders", true);
+user_pref("gfx.webrender.compositor.force-enabled", true);
+user_pref("gfx.webrender.layer-compositor", true);
+user_pref("gfx.canvas.accelerated.cache-items", 4096);
+user_pref("gfx.canvas.accelerated.cache-size", 512);
+user_pref("webgl.max-size", 16384);
+user_pref("webgl.force-enabled", true);
+user_pref("layers.gpu-process.force-enabled", true);
+user_pref("media.hardware-video-decoding.force-enabled", true);
 user_pref("image.jxl.enabled", true);
+
+// ═══════════════════════════════════════════
+// FASTFOX — curated speed tweaks (Betterfox/Fastfox)
+// ═══════════════════════════════════════════
+user_pref("nglayout.initialpaint.delay", 0);
+user_pref("nglayout.initialpaint.delay_in_oopif", 0);
+user_pref("content.notify.interval", 100000);
+user_pref("browser.cache.jsbc_compression_level", 3);
+user_pref("browser.cache.disk.metadata_memory_limit", 16384);
+user_pref("browser.cache.memory.capacity", 131072);
+user_pref("browser.cache.memory.max_entry_size", 20480);
+user_pref("media.memory_caches_combined_limit_kb", 1048576);
+user_pref("media.cache_readahead_limit", 600);
+user_pref("media.cache_resume_threshold", 300);
+user_pref("image.cache.size", 10485760);
+user_pref("image.mem.decode_bytes_at_a_time", 65536);
+user_pref("network.buffer.cache.size", 65535);
+user_pref("network.buffer.cache.count", 48);
+user_pref("network.http.max-connections", 1800);
+user_pref("network.http.max-persistent-connections-per-server", 10);
+user_pref("network.http.max-urgent-start-excessive-connections-per-host", 5);
+user_pref("network.http.pacing.requests.enabled", false);
+user_pref("network.dnsCacheEntries", 10000);
+user_pref("network.dnsCacheExpiration", 3600);
+user_pref("network.dnsCacheExpirationGracePeriod", 120);
+user_pref("network.ssl_tokens_cache_capacity", 10240);
+user_pref("browser.tabs.min_inactive_duration_before_unload", 300000);
+user_pref("dom.ipc.processPrelaunch.fission.number", 1);
 
 // ═══════════════════════════════════════════
 // PRIVACY — strict tracking protection
@@ -263,6 +300,7 @@ user_pref("browser.urlbar.suggest.topsites", false);
 user_pref("browser.urlbar.suggest.calculator", true);
 user_pref("browser.urlbar.unitConversion.enabled", true);
 user_pref("browser.urlbar.trending.featureGate", false);
+user_pref("browser.search.hiddenOneOffs", "Amazon.com,eBay,Perplexity");
 user_pref("browser.urlbar.scotchBonnet.enableOverride", false);
 user_pref("browser.tabs.tabmanager.enabled", false);
 
@@ -335,6 +373,72 @@ user_pref("browser.newtabpage.activity-stream.improvesearch.topSiteSearchShortcu
 user_pref("browser.newtabpage.activity-stream.feeds.section.topstories", false);
 user_pref("browser.newtabpage.activity-stream.feeds.section.highlights", false);
 user_pref("browser.newtabpage.activity-stream.feeds.snippets", false);
+
+// ═══════════════════════════════════════════
+// EXTENSION SIGNATURES — allow unsigned add-ons
+// (effective via autoconfig/sensiblefox.cfg in stable Firefox)
+// ═══════════════════════════════════════════
+user_pref("xpinstall.signatures.required", false);
+user_pref("xpinstall.whitelist.required", false);
+user_pref("extensions.langpacks.signatures.required", false);
+user_pref("extensions.experiments.enabled", true);
+user_pref("extensions.install.requireBuiltInCerts", false);
+user_pref("extensions.update.requireBuiltInCerts", false);
+
+// ═══════════════════════════════════════════
+// REFERRER POLICY — strict-origin-when-cross-origin (Firefox default)
+// • cross-origin: scheme+host+port only (no path/query)
+// • same-origin:  full referrer
+// • never spoof — sites use it for legitimate auth flows
+// ═══════════════════════════════════════════
+user_pref("network.http.sendRefererHeader", 2);
+user_pref("network.http.referer.spoofSource", false);
+user_pref("network.http.referer.XOriginPolicy", 0);
+user_pref("network.http.referer.XOriginTrimmingPolicy", 2);
+user_pref("network.http.referer.trimmingPolicy", 0);
+user_pref("network.http.referer.defaultPolicy", 2);
+user_pref("network.http.referer.defaultPolicy.pbmode", 2);
+user_pref("network.http.referer.disallowCrossSiteRelaxingDefault", true);
+user_pref("network.http.referer.hideOnionSource", true);
+
+// ═══════════════════════════════════════════
+// TRACKING — modern signals, sensible defaults
+// ═══════════════════════════════════════════
+user_pref("privacy.globalprivacycontrol.enabled", true);
+user_pref("privacy.globalprivacycontrol.functionality.enabled", true);
+user_pref("privacy.globalprivacycontrol.pbmode.enabled", true);
+user_pref("privacy.donottrackheader.enabled", true);
+user_pref("privacy.fingerprintingProtection", true);
+user_pref("privacy.query_stripping.enabled", true);
+user_pref("privacy.query_stripping.enabled.pbmode", true);
+
+// ═══════════════════════════════════════════
+// WARNING BYPASS — keep safety nets, but never block the user
+// detection stays ON; the user can always click through.
+// ═══════════════════════════════════════════
+user_pref("browser.safebrowsing.allowOverride", true);
+user_pref("browser.safebrowsing.malware.enabled", true);
+user_pref("browser.safebrowsing.phishing.enabled", true);
+user_pref("browser.safebrowsing.blockedURIs.enabled", true);
+user_pref("browser.safebrowsing.downloads.enabled", true);
+user_pref("security.warn_entering_weak", false);
+user_pref("security.warn_entering_weak.show_once", false);
+user_pref("security.warn_leaving_secure", false);
+user_pref("security.warn_leaving_secure.show_once", false);
+user_pref("security.warn_submit_insecure", false);
+user_pref("security.warn_submit_secure_to_insecure", false);
+user_pref("security.warn_viewing_mixed", false);
+user_pref("security.warn_viewing_mixed.show_once", false);
+user_pref("security.mixed_content.block_active_content", false);
+user_pref("security.mixed_content.block_display_content", false);
+user_pref("security.insecure_connection_text.enabled", false);
+user_pref("security.insecure_connection_text.pbmode.enabled", false);
+user_pref("network.protocol-handler.warn-external-default", false);
+user_pref("browser.tabs.warnOnCloseOtherTabs", false);
+user_pref("browser.tabs.warnOnOpen", false);
+user_pref("browser.sessionstore.warnOnQuit", false);
+user_pref("general.warnOnAboutConfig", false);
+user_pref("browser.aboutConfig.showWarning", false);
 
 // ═══════════════════════════════════════════
 // CUSTOMIZATION ENABLEMENT — userChrome, SVG, toolbar layout

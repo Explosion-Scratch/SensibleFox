@@ -35,13 +35,14 @@ pub fn register_default(profile_path: &Path) {
     let profiles_ini = root.join("profiles.ini");
     let mut ini = read_ini(&profiles_ini);
     upsert_profile(&mut ini, &rel_str);
+    point_installs_at(&mut ini, &rel_str);
     ensure_general(&mut ini);
     fs::write(&profiles_ini, write_ini(&ini)).ok();
 
     let installs_ini = root.join("installs.ini");
     if installs_ini.exists() {
         let mut ini = read_ini(&installs_ini);
-        set_install_default(&mut ini, &rel_str);
+        point_installs_at(&mut ini, &rel_str);
         fs::write(&installs_ini, write_ini(&ini)).ok();
     }
 
@@ -61,6 +62,12 @@ pub fn unregister(profile_path: &Path) {
         ini.sections.retain(|(name, kv)| {
             !(name.starts_with("Profile") && get(kv, "Path").map_or(false, |p| p == rel_str))
         });
+        for (name, kv) in ini.sections.iter_mut() {
+            if name.starts_with("Install") && get(kv, "Default").map_or(false, |p| p == rel_str) {
+                remove(kv, "Default");
+                remove(kv, "Locked");
+            }
+        }
         renumber_profiles(&mut ini);
         fs::write(&profiles_ini, write_ini(&ini)).ok();
     }
@@ -194,9 +201,9 @@ fn ensure_general(ini: &mut Ini) {
     }
 }
 
-fn set_install_default(ini: &mut Ini, rel_path: &str) {
+fn point_installs_at(ini: &mut Ini, rel_path: &str) {
     for (name, kv) in ini.sections.iter_mut() {
-        if name == "General" {
+        if !name.starts_with("Install") {
             continue;
         }
         set(kv, "Default", rel_path);
