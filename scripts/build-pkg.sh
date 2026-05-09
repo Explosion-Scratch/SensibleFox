@@ -1,24 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# sensiblefox — Build macOS .pkg installer
+# SensibleFox — Build macOS .pkg installer
 #
-# Produces dist/sensiblefox.pkg containing a complete, pre-configured
-# Firefox.app at $INSTALL_LOCATION (default /Applications). The bundled
-# Firefox carries:
-#   • distribution/policies.json       — enterprise policies (uBO auto-install,
-#                                        telemetry off, DoH, etc.)
-#   • defaults/pref/autoconfig.js      — sentinel that bootstraps autoconfig
-#   • sensiblefox.cfg                  — autoconfig script: ~800 defaultPref()
-#                                        calls + global CSS injection. This is
-#                                        the canonical Mozilla-supported path
-#                                        for shipping default prefs (modern
-#                                        Firefox ignores arbitrary .js files
-#                                        in defaults/pref/).
-#   • sensiblefox/userChrome.css       — bundled CSS loaded as AGENT_SHEET
-#
-# The .pkg installs Firefox only — it does NOT include the sensiblefox CLI.
-# The CLI is a developer/iteration tool built separately via `cargo build`.
+# Produces dist/SensibleFox.pkg. The .pkg ships only the SensibleFox payload
+# (policies.json, autoconfig.cfg, userChrome.css, uBO managed storage). At
+# install time the postinstall script:
+#   • fetches the latest Firefox version
+#   • shows the user which version is about to be installed
+#   • downloads the matching Firefox.app into /Applications
+#   • injects the payload so the install is fully configured
 #
 # Configurable via environment:
 #   INSTALL_LOCATION  Where Firefox.app lands (default: /Applications)
@@ -31,7 +22,6 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DIST_DIR="$ROOT_DIR/dist"
 ASSETS_DIR="$ROOT_DIR/assets"
 GEN_DIR="$ROOT_DIR/generated"
-STAGING_DIR="$DIST_DIR/staging"
 PKG_ROOT="$DIST_DIR/pkg-root"
 SCRIPTS_DIR="$DIST_DIR/pkg-scripts"
 
@@ -39,10 +29,10 @@ INSTALL_LOCATION="${INSTALL_LOCATION:-/Applications}"
 FIREFOX_LANG="${FIREFOX_LANG:-en-US}"
 PKG_VERSION="${PKG_VERSION:-1.0.0}"
 PKG_IDENTIFIER="${PKG_IDENTIFIER:-com.sensiblefox.firefox}"
-FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=$FIREFOX_LANG"
+PAYLOAD_DIR="/Library/Application Support/SensibleFox/payload"
 
-echo "sensiblefox: building Firefox installer .pkg"
-echo "============================================"
+echo "SensibleFox: building installer .pkg"
+echo "===================================="
 echo "  install location : $INSTALL_LOCATION"
 echo "  locale           : $FIREFOX_LANG"
 echo "  version          : $PKG_VERSION"
@@ -62,58 +52,22 @@ for f in policies.json autoconfig.js sensiblefox.cfg.tail uBlock0@raymondhill.ne
 done
 
 echo "  → Cleaning previous build..."
-rm -rf "$STAGING_DIR" "$PKG_ROOT" "$SCRIPTS_DIR" "$DIST_DIR/sensiblefox.pkg"
-mkdir -p "$STAGING_DIR" "$PKG_ROOT$INSTALL_LOCATION" "$SCRIPTS_DIR"
+rm -rf "$PKG_ROOT" "$SCRIPTS_DIR" "$DIST_DIR/SensibleFox.pkg" "$DIST_DIR/sensiblefox.pkg"
+mkdir -p "$PKG_ROOT$PAYLOAD_DIR" "$SCRIPTS_DIR"
 
-DMG_PATH="$STAGING_DIR/Firefox.dmg"
-echo "  → Downloading Firefox ($FIREFOX_LANG)..."
-curl -fSL --progress-bar "$FIREFOX_DMG_URL" -o "$DMG_PATH"
+echo "  → Staging payload assets..."
+cp "$ASSETS_DIR/policies.json" "$PKG_ROOT$PAYLOAD_DIR/policies.json"
+cp "$ASSETS_DIR/autoconfig.js" "$PKG_ROOT$PAYLOAD_DIR/autoconfig.js"
+cp "$ASSETS_DIR/uBlock0@raymondhill.net.json" "$PKG_ROOT$PAYLOAD_DIR/uBlock0@raymondhill.net.json"
 
-echo "  → Mounting DMG..."
-MOUNT_POINT="$(hdiutil attach -nobrowse -noautoopen "$DMG_PATH" \
-    | awk '/\/Volumes\// { for (i=3; i<=NF; ++i) printf "%s%s", $i, (i==NF ? "" : " ") }' \
-    | tail -n1)"
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-    MOUNT_POINT="$(ls -d /Volumes/Firefox* 2>/dev/null | head -1)"
-fi
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-    echo "  ✗ Could not locate Firefox DMG mount point"
-    exit 1
-fi
-trap 'hdiutil detach -quiet "$MOUNT_POINT" 2>/dev/null || true' EXIT
-
-echo "  → Copying Firefox.app to staging..."
-ditto "$MOUNT_POINT/Firefox.app" "$STAGING_DIR/Firefox.app"
-
-echo "  → Detaching DMG..."
-hdiutil detach -quiet "$MOUNT_POINT"
-trap - EXIT
-
-echo "  → Removing quarantine attribute..."
-xattr -r -d com.apple.quarantine "$STAGING_DIR/Firefox.app" 2>/dev/null || true
-
-RES_DIR="$STAGING_DIR/Firefox.app/Contents/Resources"
-
-echo "  → Injecting policies.json..."
-mkdir -p "$RES_DIR/distribution"
-cp "$ASSETS_DIR/policies.json" "$RES_DIR/distribution/policies.json"
-
-echo "  → Injecting autoconfig sentinel..."
-mkdir -p "$RES_DIR/defaults/pref"
-cp "$ASSETS_DIR/autoconfig.js" "$RES_DIR/defaults/pref/autoconfig.js"
-
-echo "  → Assembling sensiblefox.cfg (defaults + CSS injection)..."
 {
     cat "$GEN_DIR/sensiblefox-defaults.js"
     cat "$ASSETS_DIR/sensiblefox.cfg.tail"
-} > "$RES_DIR/sensiblefox.cfg"
+} > "$PKG_ROOT$PAYLOAD_DIR/sensiblefox.cfg"
 
-echo "  → Bundling CSS payload..."
-mkdir -p "$RES_DIR/sensiblefox"
 {
-    echo "/* sensiblefox bundled userChrome — generated by build-pkg.sh */"
+    echo "/* SensibleFox bundled userChrome — generated by build-pkg.sh */"
     for f in macos-native-tabbar.css \
-             sliding-bookmarks-menu.css \
              ublock_icon_change.css \
              cleaner_extensions_menu.css \
              no_search_engines_in_url_bar.css \
@@ -126,23 +80,95 @@ mkdir -p "$RES_DIR/sensiblefox"
             cat "$ASSETS_DIR/$f"
         fi
     done
-} > "$RES_DIR/sensiblefox/userChrome.css"
+} > "$PKG_ROOT$PAYLOAD_DIR/userChrome.css"
 
-echo "  → Staging payload at $INSTALL_LOCATION..."
-ditto "$STAGING_DIR/Firefox.app" "$PKG_ROOT$INSTALL_LOCATION/Firefox.app"
-
-echo "  → Staging uBlock managed storage (system-wide)..."
+echo "  → Staging system-wide uBO managed storage..."
 MANAGED_DIR="$PKG_ROOT/Library/Application Support/Mozilla/ManagedStorage"
 mkdir -p "$MANAGED_DIR"
 cp "$ASSETS_DIR/uBlock0@raymondhill.net.json" "$MANAGED_DIR/uBlock0@raymondhill.net.json"
 
-echo "  → Writing postinstall..."
-cat > "$SCRIPTS_DIR/postinstall" << 'POSTINSTALL'
+echo "  → Writing preinstall (version preview)..."
+cat > "$SCRIPTS_DIR/preinstall" <<PREINSTALL
 #!/usr/bin/env bash
+set -e
+
+VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
+VERSION="\$(curl -fsSL --max-time 10 "\$VERSION_URL" 2>/dev/null \\
+    | /usr/bin/sed -n 's/.*"LATEST_FIREFOX_VERSION"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' \\
+    | head -1)"
+[ -z "\$VERSION" ] && VERSION="latest"
+
+echo ""
+echo "──────────────────────────────────────────────"
+echo "  SensibleFox will install Firefox \$VERSION"
+echo "──────────────────────────────────────────────"
+echo ""
+
+CONSOLE_USER="\$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+if [ -n "\$CONSOLE_USER" ] && [ "\$CONSOLE_USER" != "root" ]; then
+    /bin/launchctl asuser "\$(/usr/bin/id -u "\$CONSOLE_USER")" /usr/bin/sudo -u "\$CONSOLE_USER" \\
+        /usr/bin/osascript -e "display notification \"Installing Firefox \$VERSION\" with title \"SensibleFox\"" \\
+        >/dev/null 2>&1 || true
+fi
+
+exit 0
+PREINSTALL
+chmod 755 "$SCRIPTS_DIR/preinstall"
+
+echo "  → Writing postinstall (download + configure)..."
+cat > "$SCRIPTS_DIR/postinstall" <<POSTINSTALL
+#!/usr/bin/env bash
+set -e
+
+PAYLOAD="$PAYLOAD_DIR"
+APP="$INSTALL_LOCATION/Firefox.app"
+FF_LANG="$FIREFOX_LANG"
+DMG_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=\$FF_LANG"
+
+VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
+VERSION="\$(curl -fsSL --max-time 10 "\$VERSION_URL" 2>/dev/null \\
+    | /usr/bin/sed -n 's/.*"LATEST_FIREFOX_VERSION"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' \\
+    | head -1)"
+[ -z "\$VERSION" ] && VERSION="latest"
+
+echo "SensibleFox: downloading Firefox \$VERSION..."
+
+TMP="\$(mktemp -d -t sensiblefox)"
+trap 'rm -rf "\$TMP"' EXIT
+DMG="\$TMP/Firefox.dmg"
+
+curl -fSL "\$DMG_URL" -o "\$DMG"
+
+MOUNT="\$(/usr/bin/hdiutil attach -nobrowse -noautoopen "\$DMG" \\
+    | awk '/\\/Volumes\\// { for (i=3; i<=NF; ++i) printf "%s%s", \$i, (i==NF ? "" : " ") }' \\
+    | tail -n1)"
+if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
+    MOUNT="\$(ls -d /Volumes/Firefox* 2>/dev/null | head -1)"
+fi
+if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
+    echo "SensibleFox: could not mount Firefox DMG"
+    exit 1
+fi
+
+if [ -d "\$APP" ]; then
+    rm -rf "\$APP"
+fi
+/usr/bin/ditto "\$MOUNT/Firefox.app" "\$APP"
+/usr/bin/hdiutil detach -quiet "\$MOUNT" || true
+
+/usr/bin/xattr -r -d com.apple.quarantine "\$APP" 2>/dev/null || true
+
+RES="\$APP/Contents/Resources"
+mkdir -p "\$RES/distribution" "\$RES/defaults/pref" "\$RES/sensiblefox"
+cp "\$PAYLOAD/policies.json"   "\$RES/distribution/policies.json"
+cp "\$PAYLOAD/autoconfig.js"   "\$RES/defaults/pref/autoconfig.js"
+cp "\$PAYLOAD/sensiblefox.cfg" "\$RES/sensiblefox.cfg"
+cp "\$PAYLOAD/userChrome.css"  "\$RES/sensiblefox/userChrome.css"
+
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║  sensiblefox installed.                      ║"
-echo "║  Launch Firefox — fully configured.          ║"
+echo "║  SensibleFox installed Firefox \$VERSION"
+echo "║  Launch Firefox — fully configured."
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 exit 0
@@ -156,13 +182,13 @@ pkgbuild \
     --identifier "$PKG_IDENTIFIER" \
     --version "$PKG_VERSION" \
     --install-location "/" \
-    "$DIST_DIR/sensiblefox.pkg" \
+    "$DIST_DIR/SensibleFox.pkg" \
     > /dev/null
 
-rm -rf "$STAGING_DIR" "$PKG_ROOT" "$SCRIPTS_DIR"
+rm -rf "$PKG_ROOT" "$SCRIPTS_DIR"
 
-SIZE=$(du -h "$DIST_DIR/sensiblefox.pkg" | cut -f1 | tr -d ' ')
+SIZE=$(du -h "$DIST_DIR/SensibleFox.pkg" | cut -f1 | tr -d ' ')
 echo ""
-echo "  ✓ Built dist/sensiblefox.pkg ($SIZE)"
-echo "    Install: open dist/sensiblefox.pkg"
-echo "    Or:      sudo installer -pkg dist/sensiblefox.pkg -target /"
+echo "  ✓ Built dist/SensibleFox.pkg ($SIZE)"
+echo "    Install: open dist/SensibleFox.pkg"
+echo "    Or:      sudo installer -pkg dist/SensibleFox.pkg -target /"

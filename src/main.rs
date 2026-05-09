@@ -47,7 +47,10 @@ fn main() {
         return;
     }
 
-    let profile_path = cli.profile_path.unwrap_or_else(default_profile_path);
+    let using_default_path = cli.profile_path.is_none();
+    let profile_path = cli
+        .profile_path
+        .unwrap_or_else(profile::default_profile_path);
 
     if profile_path.exists() {
         println!(
@@ -55,6 +58,9 @@ fn main() {
             style("→").blue().bold(),
             style(profile_path.display()).cyan()
         );
+        if using_default_path {
+            profile::register_default(&profile_path);
+        }
         println!("  Launching existing profile...\n");
         extensions::write_ublock_managed_storage();
         let firefox_path = firefox::detect_or_download();
@@ -76,6 +82,11 @@ fn main() {
 
     step("Installing uBlock Origin");
     extensions::install_ublock(&profile_path);
+
+    if using_default_path {
+        step("Registering default profile");
+        profile::register_default(&profile_path);
+    }
 
     println!(
         "\n{} Profile built at {}",
@@ -130,63 +141,30 @@ fn step(msg: &str) {
     println!("{} {}", style("→").blue().bold(), style(msg).bold());
 }
 
-fn default_profile_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("sensiblefox")
-        .join("profile")
-}
-
 fn clean_profiles() {
-    use dialoguer::{theme::ColorfulTheme, MultiSelect};
+    use dialoguer::{theme::ColorfulTheme, Confirm};
     use std::fs;
 
-    let base_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("sensiblefox");
-
-    if !base_dir.exists() {
-        println!("  {} No profiles found at {}", style("!").yellow(), base_dir.display());
+    let path = profile::default_profile_path();
+    if !path.exists() {
+        println!("  {} No SensibleFox profile found", style("!").yellow());
         return;
     }
 
-    let mut profiles = Vec::new();
-    if let Ok(entries) = fs::read_dir(&base_dir) {
-        for entry in entries.flatten() {
-            if entry.file_type().map_or(false, |t| t.is_dir()) {
-                profiles.push(entry.path());
-            }
-        }
-    }
-
-    if profiles.is_empty() {
-        println!("  {} No profiles found in {}", style("!").yellow(), base_dir.display());
-        return;
-    }
-
-    let profile_names: Vec<String> = profiles
-        .iter()
-        .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
-        .collect();
-
-    let selections = MultiSelect::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select profiles to delete (Space to select, Enter to confirm)")
-        .items(&profile_names)
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!("Delete profile at {}?", path.display()))
+        .default(false)
         .interact()
-        .expect("Failed to render prompt");
+        .unwrap_or(false);
 
-    if selections.is_empty() {
-        println!("  No profiles selected for deletion.");
+    if !confirm {
         return;
     }
 
-    for idx in selections {
-        let path = &profiles[idx];
-        print!("  {} Deleting {}... ", style("→").blue(), path.display());
-        if let Err(e) = fs::remove_dir_all(path) {
-            println!("{} ({})", style("failed").red(), e);
-        } else {
-            println!("{}", style("ok").green());
-        }
+    if let Err(e) = fs::remove_dir_all(&path) {
+        println!("  {} Failed to delete: {}", style("✗").red(), e);
+        return;
     }
+    profile::unregister(&path);
+    println!("  {} Profile deleted", style("✓").green());
 }

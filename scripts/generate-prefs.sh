@@ -327,7 +327,7 @@ user_pref("ui.SpellCheckerUnderlineStyle", 1);
 user_pref("browser.bookmarks.max_backups", 5);
 user_pref("pdfjs.sidebarViewOnLoad", 1);
 user_pref("browser.helperApps.showOpenOptionForPdfJS", true);
-user_pref("browser.toolbars.bookmarks.visibility", "always");
+user_pref("browser.toolbars.bookmarks.visibility", "newtab");
 user_pref("browser.newtabpage.activity-stream.discoverystream.enabled", false);
 user_pref("browser.newtabpage.activity-stream.showSearch", true);
 user_pref("browser.newtabpage.activity-stream.feeds.topsites", false);

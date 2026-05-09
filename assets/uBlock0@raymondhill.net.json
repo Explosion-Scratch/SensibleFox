@@ -38,7 +38,14 @@
         "ublock-quick-fixes",
         "ublock-unbreak",
         "urlhaus-1",
-        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/ClearURLs%20for%20uBo/clear_urls_uboified.txt"
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/BrowseWebsitesWithoutLoggingIn.txt",
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/ClearURLs%20for%20uBo/clear_urls_uboified.txt",
+        "https://filters.adtidy.org/extension/ublock/filters/3.txt",
+        "https://gitflic.ru/project/magnolia1234/bypass-paywalls-clean-filters/blob/raw?file=bpc-paywall-filter.txt",
+        "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.mini.txt",
+        "https://raw.githubusercontent.com/liamengland1/miscfilters/master/antipaywall.txt",
+        "https://raw.githubusercontent.com/yokoffing/filterlists/main/annoyance_list.txt",
+        "https://raw.githubusercontent.com/yokoffing/filterlists/main/youtube_clear_view.txt"
       ]
     }
   }

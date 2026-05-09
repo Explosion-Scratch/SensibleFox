@@ -11,7 +11,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-09 15:23:45
+// Generated: 2026-05-09 16:19:03
 
 
 // ═══════════════════════════════════════════
@@ -3063,7 +3063,7 @@ defaultPref("ui.SpellCheckerUnderlineStyle", 1);
 defaultPref("browser.bookmarks.max_backups", 5);
 defaultPref("pdfjs.sidebarViewOnLoad", 1);
 defaultPref("browser.helperApps.showOpenOptionForPdfJS", true);
-defaultPref("browser.toolbars.bookmarks.visibility", "always");
+defaultPref("browser.toolbars.bookmarks.visibility", "newtab");
 defaultPref("browser.newtabpage.activity-stream.discoverystream.enabled", false);
 defaultPref("browser.newtabpage.activity-stream.showSearch", true);
 defaultPref("browser.newtabpage.activity-stream.feeds.topsites", false);

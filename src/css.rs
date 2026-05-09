@@ -4,7 +4,6 @@ use std::io::Write;
 use std::path::Path;
 
 const MACOS_TABBAR: &str = include_str!("../assets/macos-native-tabbar.css");
-const SLIDING_BOOKMARKS: &str = include_str!("../assets/sliding-bookmarks-menu.css");
 const UBLOCK_ICON: &str = include_str!("../assets/ublock_icon_change.css");
 const CLEANER_EXTENSIONS: &str = include_str!("../assets/cleaner_extensions_menu.css");
 const NO_SEARCH_ENGINES: &str = include_str!("../assets/no_search_engines_in_url_bar.css");
@@ -21,7 +20,6 @@ pub fn write(profile_path: &Path) {
 
     let css_modules: &[(&str, &str)] = &[
         ("macos-native-tabbar.css", MACOS_TABBAR),
-        ("sliding-bookmarks-menu.css", SLIDING_BOOKMARKS),
         ("ublock-icon-change.css", UBLOCK_ICON),
         ("cleaner-extensions-menu.css", CLEANER_EXTENSIONS),
         ("no-search-engines-urlbar.css", NO_SEARCH_ENGINES),
