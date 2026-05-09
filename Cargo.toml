@@ -1,0 +1,26 @@
+[package]
+name = "sensiblefox"
+version = "1.0.0"
+edition = "2021"
+description = "Opinionated Firefox configurator for macOS"
+license = "MIT"
+
+[[bin]]
+name = "sensiblefox"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", features = ["blocking"] }
+tempfile = "3"
+dirs = "6"
+zip = "2"
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.12.0"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "z"

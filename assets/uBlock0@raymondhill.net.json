@@ -1,0 +1,45 @@
+{
+  "name": "uBlock0@raymondhill.net",
+  "description": "sensiblefox default uBlock filter bundle (no Anti-Facebook list)",
+  "type": "storage",
+  "data": {
+    "toOverwrite": {
+      "filterLists": [
+        "user-filters",
+        "adguard-cookies",
+        "adguard-generic",
+        "adguard-mobile",
+        "adguard-mobile-app-banners",
+        "adguard-other-annoyances",
+        "adguard-popup-overlays",
+        "adguard-social",
+        "adguard-spyware-url",
+        "adguard-widgets",
+        "block-lan",
+        "curben-phishing",
+        "dpollock-0",
+        "easylist",
+        "easylist-annoyances",
+        "easylist-chat",
+        "easylist-newsletters",
+        "easylist-notifications",
+        "easyprivacy",
+        "fanboy-ai-suggestions",
+        "fanboy-cookiemonster",
+        "fanboy-social",
+        "plowe-0",
+        "ublock-annoyances",
+        "ublock-badware",
+        "ublock-cookies-adguard",
+        "ublock-cookies-easylist",
+        "ublock-experimental",
+        "ublock-filters",
+        "ublock-privacy",
+        "ublock-quick-fixes",
+        "ublock-unbreak",
+        "urlhaus-1",
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/ClearURLs%20for%20uBo/clear_urls_uboified.txt"
+      ]
+    }
+  }
+}

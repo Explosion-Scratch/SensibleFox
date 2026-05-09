@@ -1,0 +1,33 @@
+
+// ════════════════════════════════════════════════════════════════════════
+// sensiblefox autoconfig — CSS injection
+// Loads bundled stylesheets as global agent/user sheets so every profile
+// gets the sensiblefox UI without per-profile chrome/userChrome.css files.
+// ════════════════════════════════════════════════════════════════════════
+(function () {
+  try {
+    const sss = Components.classes["@mozilla.org/content/style-sheet-service;1"]
+      .getService(Components.interfaces.nsIStyleSheetService);
+    const ios = Components.classes["@mozilla.org/network/io-service;1"]
+      .getService(Components.interfaces.nsIIOService);
+
+    const greDir = Services.dirsvc.get("GreD", Components.interfaces.nsIFile);
+
+    const sheets = [
+      ["sensiblefox/userChrome.css", sss.AGENT_SHEET],
+      ["sensiblefox/userContent.css", sss.USER_SHEET],
+    ];
+
+    for (const [relPath, sheetType] of sheets) {
+      const file = greDir.clone();
+      for (const part of relPath.split("/")) file.append(part);
+      if (!file.exists()) continue;
+      const uri = ios.newFileURI(file);
+      if (!sss.sheetRegistered(uri, sheetType)) {
+        sss.loadAndRegisterSheet(uri, sheetType);
+      }
+    }
+  } catch (e) {
+    Components.utils.reportError("sensiblefox autoconfig failed: " + e);
+  }
+})();

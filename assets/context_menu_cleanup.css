@@ -1,0 +1,32 @@
+/* Context menu cleanup — hide bloat items */
+#context-stripOnShareLink,
+#context-sendlinktodevice,
+#context-translate-selection,
+#frame-sep,
+#context-sep-sendlinktodevice,
+#context-print-selection,
+#context-take-screenshot,
+#context-sep-screenshots,
+#context-sep-selectall,
+#context-copy-link-to-highlight,
+#context-copy-clean-link-to-highlight,
+#context-inspect-a11y,
+#context-sendvideo,
+#context-bookmarklink,
+#context-savelink,
+#context-viewpartialsource-selection,
+#context-searchselect-private,
+#context-sendimage,
+#context-setDesktopBackground,
+#context-sep-setbackground,
+#context-bookmarkpage,
+#spell-separator,
+#spell-check-enabled,
+#spell-dictionaries {
+  display: none !important;
+}
+
+/* Tab search / list-all-tabs button */
+#alltabs-button {
+  display: none !important;
+}

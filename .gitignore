@@ -1,0 +1,6 @@
+/target
+/dist
+/generated/betterfox-*.js
+/generated/arkenfox-*.js
+*.pkg
+.DS_Store
