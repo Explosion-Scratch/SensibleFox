@@ -1,4 +1,4 @@
-<img src="screenshots/clean.png" alt="SensibleFox default UI" width="70%" align=center/>
+<div align=center><img src="screenshots/clean.png" alt="SensibleFox default UI" width="90%" align=center/></div>
 <div align=center><h1>SensibleFox</h1></div>
 <hr/>
 
