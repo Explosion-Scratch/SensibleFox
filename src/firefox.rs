@@ -683,6 +683,27 @@ fn find_firefox_mount() -> Option<String> {
 }
 
 fn which_firefox() -> Option<PathBuf> {
+    // 1 - Common macOS install locations
+    let common_paths = [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "~/Applications/Firefox.app/Contents/MacOS/firefox",
+    ];
+
+    for path in common_paths {
+        let expanded = if path.starts_with("~/") {
+            dirs::home_dir().map(|h| h.join(&path[2..]))
+        } else {
+            Some(PathBuf::from(path))
+        };
+
+        if let Some(p) = expanded {
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 2 - Fallback to PATH
     Command::new("which")
         .arg("firefox")
         .output()

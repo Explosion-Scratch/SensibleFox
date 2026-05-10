@@ -59,6 +59,7 @@ fn main() {
     // Set up SIGINT / SIGTERM handler
     let _ = ctrlc::set_handler(|| {
         eprintln!("\n…interrupted — cleaning up");
+        std::process::exit(130);
     });
 
     if cli.status_file.is_none() {
