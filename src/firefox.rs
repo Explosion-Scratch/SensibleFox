@@ -125,7 +125,11 @@ impl InstallTarget {
 }
 
 /// Find or install Firefox, returning the path to the `firefox` binary.
-pub fn detect_or_download(target: &InstallTarget) -> Result<PathBuf, String> {
+pub fn detect_or_download(
+    target: &InstallTarget,
+    unattended: bool,
+    status_file: Option<&PathBuf>,
+) -> Result<PathBuf, String> {
     let app_path = target.app_path();
     let bin = target.bin_path();
 
@@ -134,37 +138,44 @@ pub fn detect_or_download(target: &InstallTarget) -> Result<PathBuf, String> {
         let version = read_firefox_version(&app_path);
         let version_display = version.as_deref().unwrap_or("unknown version");
 
-        println!(
-            "  {} Firefox {} found at {}",
-            style("!").yellow(),
-            version_display,
-            style(app_path.display()).cyan()
-        );
-        println!(
-            "    SensibleFox needs a policy-managed Firefox so its configuration applies."
-        );
+        if status_file.is_none() {
+            println!(
+                "  {} Firefox {} found at {}",
+                style("!").yellow(),
+                version_display,
+                style(app_path.display()).cyan()
+            );
+            println!(
+                "    SensibleFox needs a policy-managed Firefox so its configuration applies."
+            );
+        }
 
-        let replace = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt(format!(
-                "Replace existing Firefox {} with a fresh policy-managed install?",
-                version_display
-            ))
-            .default(true)
-            .interact()
-            .unwrap_or(false);
+        let replace = if unattended {
+            true
+        } else {
+            dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_prompt(format!(
+                    "Replace existing Firefox {} with a fresh policy-managed install?",
+                    version_display
+                ))
+                .default(true)
+                .interact()
+                .unwrap_or(false)
+        };
 
         if replace {
-            println!(
-                "  {} Removing existing Firefox.app...",
-                style("↻").cyan()
-            );
+            if status_file.is_none() {
+                println!("  {} Removing existing Firefox.app...", style("↻").cyan());
+            }
             kill_firefox();
             if let Err(e) = std::fs::remove_dir_all(&app_path) {
                 return Err(format!("Failed to remove existing Firefox.app: {e}"));
             }
-            download_and_install(target)?;
+            download_and_install(target, status_file)?;
             if bin.exists() {
-                println!("  {} Firefox installed", style("✓").green());
+                if status_file.is_none() {
+                    println!("  {} Firefox installed", style("✓").green());
+                }
                 return Ok(bin);
             }
             return Err("Firefox binary not found after install".to_string());
@@ -182,19 +193,25 @@ pub fn detect_or_download(target: &InstallTarget) -> Result<PathBuf, String> {
 
     // 2 — Check PATH as a fallback.
     if let Some(p) = which_firefox() {
-        println!("  {} Firefox found at {}", style("✓").green(), p.display());
+        if status_file.is_none() {
+            println!("  {} Firefox found at {}", style("✓").green(), p.display());
+        }
         return Ok(p);
     }
 
     // 3 — Download & install.
-    println!(
-        "  {} Firefox not found — downloading...",
-        style("↓").cyan()
-    );
-    download_and_install(target)?;
+    if status_file.is_none() {
+        println!(
+            "  {} Firefox not found — downloading...",
+            style("↓").cyan()
+        );
+    }
+    download_and_install(target, status_file)?;
 
     if bin.exists() {
-        println!("  {} Firefox installed", style("✓").green());
+        if status_file.is_none() {
+            println!("  {} Firefox installed", style("✓").green());
+        }
         Ok(bin)
     } else {
         Err("Firefox installation failed. Install manually: brew install --cask firefox".to_string())
@@ -203,24 +220,33 @@ pub fn detect_or_download(target: &InstallTarget) -> Result<PathBuf, String> {
 
 // ── Download + install ────────────────────────────────────────────────
 
-fn download_and_install(target: &InstallTarget) -> Result<(), String> {
+fn download_and_install(
+    target: &InstallTarget,
+    status_file: Option<&PathBuf>,
+) -> Result<(), String> {
     // Keep temp dir alive for the whole function.
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| format!("failed to create temp dir: {e}"))?;
+    let tmp_dir = tempfile::tempdir().map_err(|e| format!("failed to create temp dir: {e}"))?;
     let dmg_path = tmp_dir.path().join("Firefox.dmg");
 
-    download_dmg_with_retry(&dmg_path)?;
+    download_dmg_with_retry(&dmg_path, status_file)?;
+
+    if let Some(sf) = status_file {
+        write_status(sf, "mount", "Installing Firefox", "Mounting disk image…", MOUNT_END, 100);
+    }
 
     let mount = DmgMount::attach(&dmg_path)?;
     let src_app = mount.src_app();
 
-    copy_app(&src_app, target)?;
+    copy_app(&src_app, target, status_file)?;
 
     // mount goes out of scope here → Drop detaches the DMG.
     Ok(())
 }
 
-fn download_dmg_with_retry(dmg_path: &std::path::Path) -> Result<(), String> {
+fn download_dmg_with_retry(
+    dmg_path: &std::path::Path,
+    status_file: Option<&PathBuf>,
+) -> Result<(), String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(600))
         .build()
@@ -231,27 +257,36 @@ fn download_dmg_with_retry(dmg_path: &std::path::Path) -> Result<(), String> {
     for attempt in 1..=MAX_DOWNLOAD_RETRIES {
         if attempt > 1 {
             let backoff = Duration::from_secs(2u64.pow(attempt - 1));
-            eprintln!(
-                "  {} Retrying download (attempt {}/{})…",
-                style("!").yellow(),
-                attempt,
-                MAX_DOWNLOAD_RETRIES
-            );
+            if status_file.is_none() {
+                eprintln!(
+                    "  {} Retrying download (attempt {}/{})…",
+                    style("!").yellow(),
+                    attempt,
+                    MAX_DOWNLOAD_RETRIES
+                );
+            }
             std::thread::sleep(backoff);
         }
 
-        match download_dmg(&client, dmg_path) {
+        match download_dmg(&client, dmg_path, status_file) {
             Ok(()) => return Ok(()),
             Err(e) => last_err = e,
         }
     }
 
-    Err(format!("Download failed after {MAX_DOWNLOAD_RETRIES} attempts: {last_err}"))
+    if let Some(sf) = status_file {
+        write_status(sf, "error", "SensibleFox", "Failed to download Firefox. Check connection.", 0, 100);
+    }
+
+    Err(format!(
+        "Download failed after {MAX_DOWNLOAD_RETRIES} attempts: {last_err}"
+    ))
 }
 
 fn download_dmg(
     client: &reqwest::blocking::Client,
     dmg_path: &std::path::Path,
+    status_file: Option<&PathBuf>,
 ) -> Result<(), String> {
     let response = client
         .get(FIREFOX_DMG_URL)
@@ -265,21 +300,28 @@ fn download_dmg(
 
     let total_bytes = response.content_length().unwrap_or(0);
 
-    let pb = ProgressBar::new(TOTAL);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("  {msg}\n  [{bar:40.cyan/dim}] {pos}%")
-            .unwrap()
-            .progress_chars("█▓░"),
-    );
-    pb.set_message("Downloading Firefox…");
-    pb.set_position(0);
+    let pb = if status_file.is_none() {
+        let pb = ProgressBar::new(TOTAL);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("  {msg}\n  [{bar:40.cyan/dim}] {pos}%")
+                .unwrap()
+                .progress_chars("█▓░"),
+        );
+        pb.set_message("Downloading Firefox…");
+        pb.set_position(0);
+        Some(pb)
+    } else {
+        None
+    };
 
     let mut reader = response;
     let mut file = std::fs::File::create(dmg_path)
         .map_err(|e| format!("failed to create DMG file: {e}"))?;
     let mut downloaded: u64 = 0;
     let mut buf = [0u8; 65536];
+
+    let mut last_status_pct = 0;
 
     loop {
         let n = reader
@@ -294,13 +336,32 @@ fn download_dmg(
 
         if total_bytes > 0 {
             let dl_pct = ((downloaded * DL_END) / total_bytes).min(DL_END);
-            pb.set_position(dl_pct);
-            pb.set_message(format!(
-                "Downloading Firefox — {} / {} MB",
-                downloaded / (1024 * 1024),
-                total_bytes / (1024 * 1024)
-            ));
-        } else {
+            if let Some(ref pb) = pb {
+                pb.set_position(dl_pct);
+                pb.set_message(format!(
+                    "Downloading Firefox — {} / {} MB",
+                    downloaded / (1024 * 1024),
+                    total_bytes / (1024 * 1024)
+                ));
+            }
+            if let Some(sf) = status_file {
+                if dl_pct > last_status_pct {
+                    write_status(
+                        sf,
+                        "download",
+                        "Downloading Firefox",
+                        &format!(
+                            "{} MB of {} MB",
+                            downloaded / (1024 * 1024),
+                            total_bytes / (1024 * 1024)
+                        ),
+                        dl_pct,
+                        100,
+                    );
+                    last_status_pct = dl_pct;
+                }
+            }
+        } else if let Some(ref pb) = pb {
             pb.set_message(format!(
                 "Downloading Firefox — {} MB",
                 downloaded / (1024 * 1024)
@@ -309,21 +370,31 @@ fn download_dmg(
     }
     drop(file);
 
-    pb.set_position(DL_END);
-    pb.set_message("Mounting disk image…");
+    if let Some(ref pb) = pb {
+        pb.set_position(DL_END);
+        pb.set_message("Mounting disk image…");
+    }
 
     // Brief indeterminate mount phase for visual smoothness.
     let mount_steps = MOUNT_END - DL_END;
     for i in 0..mount_steps {
-        pb.set_position(DL_END + i);
+        if let Some(ref pb) = pb {
+            pb.set_position(DL_END + i);
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
 
-    pb.finish_and_clear();
+    if let Some(pb) = pb {
+        pb.finish_and_clear();
+    }
     Ok(())
 }
 
-fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
+fn copy_app(
+    src_app: &str,
+    target: &InstallTarget,
+    status_file: Option<&PathBuf>,
+) -> Result<(), String> {
     let dest = target.app_path();
 
     // Remove any partial leftover from a previous failed copy.
@@ -339,23 +410,30 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
 
     let expected_bytes = du_bytes(&PathBuf::from(src_app));
 
-    let pb = ProgressBar::new(TOTAL);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("  {msg}\n  [{bar:40.cyan/dim}] {pos}%")
-            .unwrap()
-            .progress_chars("█▓░"),
-    );
-    pb.set_position(MOUNT_END);
-    pb.set_message(format!(
-        "Copying Firefox.app to {}…",
-        target.display_name()
-    ));
+    let pb = if status_file.is_none() {
+        let pb = ProgressBar::new(TOTAL);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("  {msg}\n  [{bar:40.cyan/dim}] {pos}%")
+                .unwrap()
+                .progress_chars("█▓░"),
+        );
+        pb.set_position(MOUNT_END);
+        pb.set_message(format!(
+            "Copying Firefox.app to {}…",
+            target.display_name()
+        ));
+        Some(pb)
+    } else {
+        None
+    };
 
-    let needs_elevation = matches!(target, InstallTarget::System);
+    let needs_elevation = matches!(target, InstallTarget::System) && !is_root();
 
     if needs_elevation && !gui_session_available() {
-        pb.finish_and_clear();
+        if let Some(pb) = pb {
+            pb.finish_and_clear();
+        }
         return Err(
             "Cannot install to /Applications in a non-GUI session.\n\
              Run with --app-dir ~/Applications, or run: sudo sensiblefox"
@@ -397,23 +475,39 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
     let poll_dest = dest.clone();
     let poll_pb = pb.clone();
     let poll_done = done.clone();
+    let poll_status_file = status_file.cloned();
 
     let poll_handle = std::thread::spawn(move || {
         // Give the copy a moment to start populating the destination.
         std::thread::sleep(Duration::from_millis(500));
+        let mut last_pct = 0;
         while !poll_done.load(std::sync::atomic::Ordering::Relaxed) {
             if poll_dest.exists() {
                 let copied = du_bytes(&poll_dest);
                 if expected_bytes > 0 {
-                    let pct =
-                        MOUNT_END + (copied * copy_range) / expected_bytes;
+                    let pct = MOUNT_END + (copied * copy_range) / expected_bytes;
                     let pct = pct.min(TOTAL - 1);
-                    poll_pb.set_position(pct);
-                    poll_pb.set_message(format!(
-                        "Copying Firefox — {} / {} MB",
-                        copied / (1024 * 1024),
-                        expected_bytes / (1024 * 1024)
-                    ));
+                    if let Some(ref pb) = poll_pb {
+                        pb.set_position(pct);
+                        pb.set_message(format!(
+                            "Copying Firefox — {} / {} MB",
+                            copied / (1024 * 1024),
+                            expected_bytes / (1024 * 1024)
+                        ));
+                    }
+                    if let Some(ref sf) = poll_status_file {
+                        if pct > last_pct {
+                            write_status(
+                                sf,
+                                "copy",
+                                "Installing Firefox",
+                                &format!("Copied {} MB to /Applications…", copied / (1024 * 1024)),
+                                pct,
+                                100,
+                            );
+                            last_pct = pct;
+                        }
+                    }
                 }
             }
             std::thread::sleep(Duration::from_millis(300));
@@ -424,12 +518,17 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
     done.store(true, std::sync::atomic::Ordering::Relaxed);
     poll_handle.join().ok();
 
-    pb.set_position(TOTAL);
-    pb.set_message("Firefox installed ✓");
-    pb.finish_and_clear();
+    if let Some(ref pb) = pb {
+        pb.set_position(TOTAL);
+        pb.set_message("Firefox installed ✓");
+        pb.finish_and_clear();
+    }
 
     let success = cp_result.map(|s| s.success()).unwrap_or(false);
     if !success || !dest.join("Contents/MacOS/firefox").exists() {
+        if let Some(sf) = status_file {
+            write_status(sf, "error", "SensibleFox", "Failed to copy Firefox to /Applications.", 0, 100);
+        }
         if needs_elevation {
             return Err(
                 "Failed to copy Firefox.app to /Applications.\n\
@@ -445,6 +544,31 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+pub fn write_status(path: &Path, step: &str, title: &str, detail: &str, progress: u64, total: i64) {
+    let mut content = String::new();
+    content.push_str(&format!("step={}\n", step));
+    content.push_str(&format!("title={}\n", title));
+    content.push_str(&format!("detail={}\n", detail));
+    content.push_str(&format!("progress={}\n", progress));
+    content.push_str(&format!("total={}\n", total));
+
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, content).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+        let _ = Command::new("chmod").args(["644", &path.to_string_lossy()]).status();
+    }
+}
+
+fn is_root() -> bool {
+    Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
+        .map(|uid| uid == 0)
+        .unwrap_or(false)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

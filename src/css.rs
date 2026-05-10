@@ -11,6 +11,27 @@ const PRIVACY_EMAIL: &str = include_str!("../assets/privacy_change_email_text.cs
 const SEARCHBAR_DOTS: &str = include_str!("../assets/show_searchbar_dots_only_on_hover.css");
 const CONTEXT_MENU_CLEANUP: &str = include_str!("../assets/context_menu_cleanup.css");
 
+pub fn bundle() -> String {
+    let css_modules: &[(&str, &str)] = &[
+        ("macos-native-tabbar.css", MACOS_TABBAR),
+        ("ublock-icon-change.css", UBLOCK_ICON),
+        ("cleaner-extensions-menu.css", CLEANER_EXTENSIONS),
+        ("no-search-engines-urlbar.css", NO_SEARCH_ENGINES),
+        ("privacy-email-text.css", PRIVACY_EMAIL),
+        ("searchbar-dots-hover.css", SEARCHBAR_DOTS),
+        ("context-menu-cleanup.css", CONTEXT_MENU_CLEANUP),
+    ];
+
+    let mut bundle = String::new();
+    bundle.push_str("/* SensibleFox bundled userChrome */\n");
+    for (name, content) in css_modules {
+        bundle.push_str(&format!("\n/* ── {} ── */\n", name));
+        bundle.push_str(content);
+        bundle.push('\n');
+    }
+    bundle
+}
+
 pub fn write(profile_path: &Path) {
     let chrome_dir = profile_path.join("chrome");
     if let Err(e) = fs::create_dir_all(&chrome_dir) {
