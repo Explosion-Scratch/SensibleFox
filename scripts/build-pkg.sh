@@ -180,13 +180,61 @@ cleanup() {
 }
 trap cleanup EXIT
 
-write_status "init" "SensibleFox" "Checking for the latest Firefox…" 0 -1
+# Progress budget across the whole install (out of 100):
+#   init       0 → 2
+#   download   2 → 50   (scaled from curl byte progress)
+#   mount     50 → 60   (linear fake progress)
+#   copy      60 → 95   (scaled from du of destination vs install size)
+#   configure 95 → 100
+DL_START=2
+DL_END=50
+MOUNT_END=60
+COPY_END=95
+
+write_status "init" "SensibleFox" "Checking for the latest Firefox…" \$DL_START 100
 
 CONSOLE_USER="\$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+CONSOLE_UID=""
 if [ -n "\$CONSOLE_USER" ] && [ "\$CONSOLE_USER" != "root" ]; then
-    /bin/launchctl asuser "\$(/usr/bin/id -u "\$CONSOLE_USER")" \\
-        /usr/bin/sudo -u "\$CONSOLE_USER" \\
-        /usr/bin/open -a "\$HELPER_APP" >/dev/null 2>&1 || true
+    CONSOLE_UID="\$(/usr/bin/id -u "\$CONSOLE_USER" 2>/dev/null || true)"
+fi
+
+run_as_user() {
+    if [ -n "\$CONSOLE_UID" ]; then
+        /bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" "\$@"
+    else
+        "\$@"
+    fi
+}
+
+if [ -n "\$CONSOLE_UID" ]; then
+    run_as_user /usr/bin/open -a "\$HELPER_APP" >/dev/null 2>&1 || true
+fi
+
+if [ -d "\$APP" ]; then
+    EXISTING_VERSION="\$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \\
+        "\$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
+    REPLY=""
+    if [ -n "\$CONSOLE_UID" ]; then
+        REPLY="\$(run_as_user /usr/bin/osascript \\
+            -e 'tell application "System Events"' \\
+            -e 'activate' \\
+            -e 'set msg to "Firefox '\"\$EXISTING_VERSION\"' is already installed at '\"\$APP\"'." & return & return & "SensibleFox needs to replace it with a policy-managed Firefox so the SensibleFox configuration applies." & return & return & "Replace the existing Firefox?"' \\
+            -e 'display dialog msg with title "SensibleFox" buttons {"Cancel", "Replace"} default button "Replace" cancel button "Cancel" with icon caution' \\
+            -e 'end tell' \\
+            2>/dev/null || true)"
+    else
+        REPLY="button returned:Replace"
+    fi
+    if echo "\$REPLY" | grep -q "Cancel"; then
+        write_status "error" "SensibleFox" "Install cancelled — existing Firefox was not replaced." 0 100
+        sleep 3
+        exit 1
+    fi
+    /usr/bin/pkill -x firefox 2>/dev/null || true
+    /usr/bin/pkill -x "Firefox" 2>/dev/null || true
+    sleep 1
+    rm -rf "\$APP"
 fi
 
 VERSION="\$(curl -fsSL --max-time 15 "\$VERSION_URL" 2>/dev/null \\
@@ -201,21 +249,23 @@ if [ "\$SIZE_BYTES" -lt 1048576 ]; then
     SIZE_BYTES=$FF_FALLBACK_BYTES
 fi
 SIZE_MB=\$((SIZE_BYTES / 1048576))
+INSTALLED_BYTES=\$((SIZE_BYTES * 4))
 
 TMP="\$(mktemp -d -t sensiblefox)"
 DMG="\$TMP/Firefox.dmg"
 
-write_status "download" "Downloading Firefox \$VERSION" "0 MB of \${SIZE_MB} MB" 0 100
+write_status "download" "Downloading Firefox \$VERSION" "0 MB of \${SIZE_MB} MB" \$DL_START 100
 
 curl -fSL "\$DMG_URL" -o "\$DMG" >/dev/null 2>&1 &
 CURL_PID=\$!
 
+DL_RANGE=\$((DL_END - DL_START))
 while kill -0 "\$CURL_PID" 2>/dev/null; do
     if [ -f "\$DMG" ]; then
         BYTES="\$(/usr/bin/stat -f%z "\$DMG" 2>/dev/null || echo 0)"
         MB=\$((BYTES / 1048576))
-        PCT=\$((BYTES * 100 / SIZE_BYTES))
-        [ "\$PCT" -gt 100 ] && PCT=100
+        PCT=\$((DL_START + BYTES * DL_RANGE / SIZE_BYTES))
+        if [ "\$PCT" -gt "\$DL_END" ]; then PCT=\$DL_END; fi
         write_status "download" "Downloading Firefox \$VERSION" \\
             "\${MB} MB of \${SIZE_MB} MB" "\$PCT" 100
     fi
@@ -223,14 +273,12 @@ while kill -0 "\$CURL_PID" 2>/dev/null; do
 done
 
 if ! wait "\$CURL_PID"; then
-    write_status "error" "SensibleFox" "Failed to download Firefox. Check your internet connection." 0 -1
+    write_status "error" "SensibleFox" "Failed to download Firefox. Check your internet connection." 0 100
     sleep 3
     exit 1
 fi
 
-write_status "download" "Downloading Firefox \$VERSION" "\${SIZE_MB} MB of \${SIZE_MB} MB" 100 100
-
-write_status "mount" "Installing Firefox \$VERSION" "Mounting disk image…" 0 -1
+write_status "mount" "Installing Firefox \$VERSION" "Mounting disk image…" \$DL_END 100
 MOUNT="\$(/usr/bin/hdiutil attach -nobrowse -noautoopen "\$DMG" \\
     | /usr/bin/awk '/\\/Volumes\\// { for (i=3; i<=NF; ++i) printf "%s%s", \$i, (i==NF ? "" : " ") }' \\
     | tail -n1)"
@@ -238,20 +286,41 @@ if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
     MOUNT="\$(ls -d /Volumes/Firefox* 2>/dev/null | head -1)"
 fi
 if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
-    write_status "error" "SensibleFox" "Could not mount the Firefox disk image." 0 -1
+    write_status "error" "SensibleFox" "Could not mount the Firefox disk image." 0 100
     sleep 3
     exit 1
 fi
 
-write_status "copy" "Installing Firefox \$VERSION" "Copying Firefox to /Applications…" 0 -1
-[ -d "\$APP" ] && rm -rf "\$APP"
-/usr/bin/ditto "\$MOUNT/Firefox.app" "\$APP"
+write_status "copy" "Installing Firefox \$VERSION" "Copying Firefox to /Applications…" \$MOUNT_END 100
+/usr/bin/ditto "\$MOUNT/Firefox.app" "\$APP" &
+DITTO_PID=\$!
+
+COPY_RANGE=\$((COPY_END - MOUNT_END))
+while kill -0 "\$DITTO_PID" 2>/dev/null; do
+    if [ -d "\$APP" ]; then
+        COPIED="\$(/usr/bin/du -sk "\$APP" 2>/dev/null | /usr/bin/awk '{print \$1 * 1024}')"
+        [ -z "\$COPIED" ] && COPIED=0
+        PCT=\$((MOUNT_END + COPIED * COPY_RANGE / INSTALLED_BYTES))
+        if [ "\$PCT" -gt "\$COPY_END" ]; then PCT=\$COPY_END; fi
+        MB=\$((COPIED / 1048576))
+        write_status "copy" "Installing Firefox \$VERSION" \\
+            "Copied \${MB} MB to /Applications…" "\$PCT" 100
+    fi
+    sleep 0.3
+done
+
+if ! wait "\$DITTO_PID"; then
+    write_status "error" "SensibleFox" "Failed to copy Firefox to /Applications." 0 100
+    sleep 3
+    exit 1
+fi
+
 /usr/bin/hdiutil detach -quiet "\$MOUNT" || true
 MOUNT=""
 
 /usr/bin/xattr -r -d com.apple.quarantine "\$APP" 2>/dev/null || true
 
-write_status "configure" "Installing Firefox \$VERSION" "Applying SensibleFox configuration…" 0 -1
+write_status "configure" "Installing Firefox \$VERSION" "Applying SensibleFox configuration…" \$COPY_END 100
 RES="\$APP/Contents/Resources"
 mkdir -p "\$RES/distribution" "\$RES/defaults/pref" "\$RES/sensiblefox"
 cp "\$PAYLOAD/policies.json"   "\$RES/distribution/policies.json"

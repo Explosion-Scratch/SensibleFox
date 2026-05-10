@@ -30,10 +30,25 @@ struct Cli {
     /// Clean existing sensiblefox profiles
     #[arg(long)]
     clean: bool,
+
+    /// Install Firefox system-wide to /Applications (requires admin password prompt)
+    #[arg(short = 's', long)]
+    system: bool,
+
+    /// Custom Firefox.app install directory (e.g. ~/Applications or /Applications)
+    #[arg(long)]
+    app_dir: Option<PathBuf>,
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    // Set up SIGINT / SIGTERM handler so temp files and DMG mounts are
+    // cleaned up on Ctrl-C.  ctrlc::set_handler sets a one-shot handler;
+    // we just request a graceful exit — the Drop impls do the heavy lifting.
+    let _ = ctrlc::set_handler(|| {
+        eprintln!("\n…interrupted — cleaning up");
+    });
 
     print_banner();
 
@@ -46,6 +61,15 @@ fn main() {
         upstream::fetch_all();
         return;
     }
+
+    // Determine install target.
+    let install_target = if let Some(ref custom) = cli.app_dir {
+        firefox::InstallTarget::Custom(custom.join("Firefox.app"))
+    } else if cli.system {
+        firefox::InstallTarget::System
+    } else {
+        firefox::InstallTarget::User
+    };
 
     let using_default_path = cli.profile_path.is_none();
     let profile_path = cli
@@ -63,13 +87,32 @@ fn main() {
         }
         println!("  Launching existing profile...\n");
         extensions::write_ublock_managed_storage();
-        let firefox_path = firefox::detect_or_download();
-        launch(&firefox_path, &profile_path);
+        match firefox::detect_or_download(&install_target) {
+            Ok(firefox_path) => launch(&firefox_path, &profile_path),
+            Err(e) => {
+                eprintln!(
+                    "  {} {}\n  Install Firefox manually and re-run, or pass --app-dir.",
+                    style("✗").red().bold(),
+                    e
+                );
+                std::process::exit(1);
+            }
+        }
         return;
     }
 
     step("Detecting Firefox");
-    let firefox_path = firefox::detect_or_download();
+    let firefox_path = match firefox::detect_or_download(&install_target) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "  {} {}\n  Install Firefox manually: brew install --cask firefox",
+                style("✗").red().bold(),
+                e
+            );
+            std::process::exit(1);
+        }
+    };
 
     step("Creating profile");
     profile::create(&profile_path);
@@ -107,18 +150,30 @@ fn main() {
 }
 
 fn launch(firefox_path: &PathBuf, profile_path: &PathBuf) {
-    Command::new(firefox_path)
+    match Command::new(firefox_path)
         .arg("--profile")
         .arg(profile_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .expect("failed to launch Firefox");
-
-    println!(
-        "{} Firefox launched with sensiblefox profile",
-        style("✓").green().bold()
-    );
+    {
+        Ok(_) => {
+            println!(
+                "{} Firefox launched with sensiblefox profile",
+                style("✓").green().bold()
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "  {} Failed to launch Firefox: {}\n  Path: {}\n  Profile: {}",
+                style("✗").red().bold(),
+                e,
+                firefox_path.display(),
+                profile_path.display()
+            );
+            std::process::exit(1);
+        }
+    }
 }
 
 fn print_banner() {

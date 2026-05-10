@@ -16,9 +16,42 @@ pub fn default_profile_path() -> PathBuf {
 }
 
 pub fn create(profile_path: &Path) {
-    fs::create_dir_all(profile_path).expect("failed to create profile directory");
-    fs::create_dir_all(profile_path.join("chrome")).expect("failed to create chrome directory");
-    fs::create_dir_all(profile_path.join("extensions")).expect("failed to create extensions directory");
+    // Basic sanity check — refuse to create profiles in obviously wrong places.
+    let path_str = profile_path.to_string_lossy();
+    if path_str == "/" || path_str == "/System" || path_str.starts_with("/System/") {
+        eprintln!(
+            "  {} Refusing to create profile at system path: {}",
+            style("✗").red(),
+            profile_path.display()
+        );
+        return;
+    }
+
+    if let Err(e) = fs::create_dir_all(profile_path) {
+        eprintln!(
+            "  {} Failed to create profile directory: {e}",
+            style("✗").red()
+        );
+        return;
+    }
+
+    let chrome_dir = profile_path.join("chrome");
+    if let Err(e) = fs::create_dir_all(&chrome_dir) {
+        eprintln!(
+            "  {} Failed to create chrome directory: {e}",
+            style("✗").red()
+        );
+        return;
+    }
+
+    let ext_dir = profile_path.join("extensions");
+    if let Err(e) = fs::create_dir_all(&ext_dir) {
+        eprintln!(
+            "  {} Failed to create extensions directory: {e}",
+            style("✗").red()
+        );
+        return;
+    }
 
     println!("  {} Profile directory created", style("✓").green());
 }
@@ -26,24 +59,45 @@ pub fn create(profile_path: &Path) {
 pub fn register_default(profile_path: &Path) {
     let Some(root) = firefox_root() else { return };
     let Ok(rel) = profile_path.strip_prefix(&root) else {
+        eprintln!(
+            "  {} Profile path is outside Firefox root — cannot register as default",
+            style("!").yellow()
+        );
         return;
     };
     let rel_str = rel.to_string_lossy().replace('\\', "/");
 
-    fs::create_dir_all(&root).ok();
+    if let Err(e) = fs::create_dir_all(&root) {
+        eprintln!(
+            "  {} Cannot create Firefox root directory: {e}",
+            style("!").yellow()
+        );
+        return;
+    }
 
     let profiles_ini = root.join("profiles.ini");
     let mut ini = read_ini(&profiles_ini);
     upsert_profile(&mut ini, &rel_str);
     point_installs_at(&mut ini, &rel_str);
     ensure_general(&mut ini);
-    fs::write(&profiles_ini, write_ini(&ini)).ok();
+    if let Err(e) = fs::write(&profiles_ini, write_ini(&ini)) {
+        eprintln!(
+            "  {} Failed to write profiles.ini: {e}",
+            style("!").yellow()
+        );
+        return;
+    }
 
     let installs_ini = root.join("installs.ini");
     if installs_ini.exists() {
         let mut ini = read_ini(&installs_ini);
         point_installs_at(&mut ini, &rel_str);
-        fs::write(&installs_ini, write_ini(&ini)).ok();
+        if let Err(e) = fs::write(&installs_ini, write_ini(&ini)) {
+            eprintln!(
+                "  {} Failed to write installs.ini: {e}",
+                style("!").yellow()
+            );
+        }
     }
 
     println!("  {} Set as default profile in profiles.ini", style("✓").green());
@@ -60,16 +114,21 @@ pub fn unregister(profile_path: &Path) {
     if profiles_ini.exists() {
         let mut ini = read_ini(&profiles_ini);
         ini.sections.retain(|(name, kv)| {
-            !(name.starts_with("Profile") && get(kv, "Path").map_or(false, |p| p == rel_str))
+            !(name.starts_with("Profile") && get(kv, "Path").is_some_and(|p| p == rel_str))
         });
         for (name, kv) in ini.sections.iter_mut() {
-            if name.starts_with("Install") && get(kv, "Default").map_or(false, |p| p == rel_str) {
+            if name.starts_with("Install") && get(kv, "Default").is_some_and(|p| p == rel_str) {
                 remove(kv, "Default");
                 remove(kv, "Locked");
             }
         }
         renumber_profiles(&mut ini);
-        fs::write(&profiles_ini, write_ini(&ini)).ok();
+        if let Err(e) = fs::write(&profiles_ini, write_ini(&ini)) {
+            eprintln!(
+                "  {} Failed to update profiles.ini: {e}",
+                style("!").yellow()
+            );
+        }
     }
 }
 
@@ -134,7 +193,7 @@ fn upsert_profile(ini: &mut Ini, rel_path: &str) {
         if !name.starts_with("Profile") {
             continue;
         }
-        let is_ours = get(kv, "Path").map_or(false, |p| p == rel_path);
+        let is_ours = get(kv, "Path") == Some(rel_path);
         if is_ours {
             set(kv, "Name", PROFILE_NAME);
             set(kv, "IsRelative", "1");

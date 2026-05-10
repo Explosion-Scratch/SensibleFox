@@ -1,6 +1,7 @@
 use console::style;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const BETTERFOX_URLS: &[(&str, &str)] = &[
     (
@@ -24,9 +25,31 @@ const BETTERFOX_URLS: &[(&str, &str)] = &[
 const ARKENFOX_URL: &str =
     "https://raw.githubusercontent.com/arkenfox/user.js/master/user.js";
 
+const MAX_FETCH_RETRIES: u32 = 2;
+
 pub fn fetch_all() {
     let out_dir = upstream_dir();
-    fs::create_dir_all(&out_dir).expect("failed to create generated directory");
+    if let Err(e) = fs::create_dir_all(&out_dir) {
+        eprintln!(
+            "  {} Failed to create generated dir: {e}",
+            style("✗").red()
+        );
+        return;
+    }
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "  {} Failed to build HTTP client: {e}",
+                style("✗").red()
+            );
+            return;
+        }
+    };
 
     println!(
         "{} Fetching upstream prefs...\n",
@@ -35,35 +58,33 @@ pub fn fetch_all() {
 
     for (name, url) in BETTERFOX_URLS {
         print!("  {} Betterfox/{name}... ", style("↓").cyan());
-        match reqwest::blocking::get(*url) {
-            Ok(resp) if resp.status().is_success() => {
-                let body = resp.text().unwrap_or_default();
+        match fetch_with_retry(&client, url) {
+            Ok(body) => {
                 let path = out_dir.join(format!("betterfox-{}.js", name.to_lowercase()));
-                fs::write(&path, &body).expect("failed to write upstream file");
-                println!("{} ({} lines)", style("ok").green(), body.lines().count());
+                if let Err(e) = fs::write(&path, &body) {
+                    println!("{} (write error: {e})", style("failed").red());
+                } else {
+                    println!("{} ({} lines)", style("ok").green(), body.lines().count());
+                }
             }
-            Ok(resp) => {
-                println!("{} (HTTP {})", style("failed").red(), resp.status());
-            }
-            Err(e) => {
-                println!("{} ({})", style("failed").red(), e);
+            Err(msg) => {
+                println!("{} ({})", style("failed").red(), msg);
             }
         }
     }
 
     print!("  {} arkenfox/user.js... ", style("↓").cyan());
-    match reqwest::blocking::get(ARKENFOX_URL) {
-        Ok(resp) if resp.status().is_success() => {
-            let body = resp.text().unwrap_or_default();
+    match fetch_with_retry(&client, ARKENFOX_URL) {
+        Ok(body) => {
             let path = out_dir.join("arkenfox-user.js");
-            fs::write(&path, &body).expect("failed to write arkenfox file");
-            println!("{} ({} lines)", style("ok").green(), body.lines().count());
+            if let Err(e) = fs::write(&path, &body) {
+                println!("{} (write error: {e})", style("failed").red());
+            } else {
+                println!("{} ({} lines)", style("ok").green(), body.lines().count());
+            }
         }
-        Ok(resp) => {
-            println!("{} (HTTP {})", style("failed").red(), resp.status());
-        }
-        Err(e) => {
-            println!("{} ({})", style("failed").red(), e);
+        Err(msg) => {
+            println!("{} ({})", style("failed").red(), msg);
         }
     }
 
@@ -80,7 +101,35 @@ pub fn fetch_all() {
     );
 }
 
-fn merge_upstream(dir: &PathBuf) {
+fn fetch_with_retry(
+    client: &reqwest::blocking::Client,
+    url: &str,
+) -> Result<String, String> {
+    let mut last_err = String::new();
+
+    for attempt in 1..=MAX_FETCH_RETRIES {
+        if attempt > 1 {
+            let backoff = Duration::from_secs(2u64.pow(attempt - 1));
+            std::thread::sleep(backoff);
+        }
+
+        match client.get(url).send() {
+            Ok(resp) if resp.status().is_success() => {
+                return resp.text().map_err(|e| format!("read error: {e}"));
+            }
+            Ok(resp) => {
+                last_err = format!("HTTP {}", resp.status());
+            }
+            Err(e) => {
+                last_err = e.to_string();
+            }
+        }
+    }
+
+    Err(last_err)
+}
+
+fn merge_upstream(dir: &Path) {
     let mut merged = String::new();
     merged.push_str("// sensiblefox — upstream prefs (auto-generated)\n");
     merged.push_str("// Pulled from Betterfox + arkenfox. Do not edit.\n");

@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-09 17:00:17
+// Generated: 2026-05-09 20:35:51
 
 
 // ═══════════════════════════════════════════

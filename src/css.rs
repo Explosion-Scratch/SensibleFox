@@ -13,10 +13,22 @@ const CONTEXT_MENU_CLEANUP: &str = include_str!("../assets/context_menu_cleanup.
 
 pub fn write(profile_path: &Path) {
     let chrome_dir = profile_path.join("chrome");
-    fs::create_dir_all(&chrome_dir).expect("failed to create chrome directory");
+    if let Err(e) = fs::create_dir_all(&chrome_dir) {
+        eprintln!(
+            "  {} Failed to create chrome directory: {e}",
+            style("✗").red()
+        );
+        return;
+    }
 
     let css_dir = chrome_dir.join("css");
-    fs::create_dir_all(&css_dir).expect("failed to create css directory");
+    if let Err(e) = fs::create_dir_all(&css_dir) {
+        eprintln!(
+            "  {} Failed to create css directory: {e}",
+            style("✗").red()
+        );
+        return;
+    }
 
     let css_modules: &[(&str, &str)] = &[
         ("macos-native-tabbar.css", MACOS_TABBAR),
@@ -28,23 +40,40 @@ pub fn write(profile_path: &Path) {
         ("context-menu-cleanup.css", CONTEXT_MENU_CLEANUP),
     ];
 
+    let mut written = 0usize;
     for (name, content) in css_modules {
-        fs::write(css_dir.join(name), content).expect("failed to write CSS module");
+        if let Err(e) = fs::write(css_dir.join(name), content) {
+            eprintln!(
+                "  {} Failed to write {name}: {e}",
+                style("!").yellow()
+            );
+        } else {
+            written += 1;
+        }
     }
 
-    let mut user_chrome = fs::File::create(chrome_dir.join("userChrome.css"))
-        .expect("failed to create userChrome.css");
+    let user_chrome_path = chrome_dir.join("userChrome.css");
+    let mut user_chrome = match fs::File::create(&user_chrome_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!(
+                "  {} Failed to create userChrome.css: {e}",
+                style("✗").red()
+            );
+            return;
+        }
+    };
 
-    writeln!(user_chrome, "/* sensiblefox — userChrome.css */").unwrap();
-    writeln!(user_chrome, "/* Auto-generated. Do not edit manually. */\n").unwrap();
+    let _ = writeln!(user_chrome, "/* sensiblefox — userChrome.css */");
+    let _ = writeln!(user_chrome, "/* Auto-generated. Do not edit manually. */\n");
 
     for (name, _) in css_modules {
-        writeln!(user_chrome, "@import url(\"css/{name}\");").unwrap();
+        let _ = writeln!(user_chrome, "@import url(\"css/{name}\");");
     }
 
     println!(
         "  {} Wrote {} CSS modules + userChrome.css",
         style("✓").green(),
-        css_modules.len()
+        written
     );
 }
