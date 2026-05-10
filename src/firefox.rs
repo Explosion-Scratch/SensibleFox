@@ -48,10 +48,17 @@ impl DmgMount {
             ));
         }
 
-        // Give the mount a moment to settle.
-        std::thread::sleep(Duration::from_millis(300));
+        // Give the mount a moment to settle, polling up to 10 seconds.
+        let mut mount_point = None;
+        for _ in 0..20 {
+            std::thread::sleep(Duration::from_millis(500));
+            if let Some(mp) = find_firefox_mount() {
+                mount_point = Some(mp);
+                break;
+            }
+        }
 
-        let mount_point = find_firefox_mount()
+        let mount_point = mount_point
             .ok_or_else(|| "Could not locate mounted Firefox volume".to_string())?;
 
         Ok(DmgMount { mount_point })
@@ -359,10 +366,12 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
     // Start the copy.
     let mut child = if needs_elevation {
         // Use osascript to get admin privileges via the native macOS dialog.
+        let user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
         let script = format!(
-            "do shell script \"ditto '{}' '{}'\" with administrator privileges",
+            "do shell script \"ditto '{0}' '{1}' && xattr -r -d com.apple.quarantine '{1}' >/dev/null 2>&1 || true && chown -R '{2}' '{1}' >/dev/null 2>&1 || true\" with administrator privileges",
             src_app.replace('\'', "'\\''"),
             dest.to_string_lossy().replace('\'', "'\\''"),
+            user.replace('\'', "'\\''")
         );
         Command::new("osascript")
             .args(["-e", &script])
@@ -370,11 +379,16 @@ fn copy_app(src_app: &str, target: &InstallTarget) -> Result<(), String> {
             .map_err(|e| format!("failed to launch osascript: {e}"))?
     } else {
         // ditto preserves code signatures (unlike cp -R).
-        Command::new("ditto")
-            .arg(src_app)
-            .arg(&dest)
+        Command::new("bash")
+            .arg("-c")
+            .arg(format!(
+                "ditto '{}' '{}' && xattr -r -d com.apple.quarantine '{}' >/dev/null 2>&1 || true",
+                src_app.replace('\'', "'\\''"),
+                dest.to_string_lossy().replace('\'', "'\\''"),
+                dest.to_string_lossy().replace('\'', "'\\''")
+            ))
             .spawn()
-            .map_err(|e| format!("failed to launch ditto: {e}"))?
+            .map_err(|e| format!("failed to launch bash: {e}"))?
     };
 
     // Progress polling thread.
@@ -470,6 +484,11 @@ fn kill_firefox() {
             return;
         }
         std::thread::sleep(Duration::from_millis(250));
+    }
+
+    // Fallback: send SIGKILL if it's stubbornly refusing to quit
+    for name in &["firefox", "Firefox", "firefox-bin", "plugin-container"] {
+        Command::new("pkill").args(["-9", "-x", name]).status().ok();
     }
 }
 

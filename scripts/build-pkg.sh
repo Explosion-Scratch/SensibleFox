@@ -233,6 +233,9 @@ if [ -d "\$APP" ]; then
     fi
     /usr/bin/pkill -x firefox 2>/dev/null || true
     /usr/bin/pkill -x "Firefox" 2>/dev/null || true
+    sleep 2
+    /usr/bin/pkill -9 -x firefox 2>/dev/null || true
+    /usr/bin/pkill -9 -x "Firefox" 2>/dev/null || true
     sleep 1
     rm -rf "\$APP"
 fi
@@ -283,7 +286,8 @@ MOUNT="\$(/usr/bin/hdiutil attach -nobrowse -noautoopen "\$DMG" \\
     | /usr/bin/awk '/\\/Volumes\\// { for (i=3; i<=NF; ++i) printf "%s%s", \$i, (i==NF ? "" : " ") }' \\
     | tail -n1)"
 if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
-    MOUNT="\$(ls -d /Volumes/Firefox* 2>/dev/null | head -1)"
+    sleep 2
+    MOUNT="\$(ls -d /Volumes/Firefox* 2>/dev/null | head -1 || true)"
 fi
 if [ -z "\$MOUNT" ] || [ ! -d "\$MOUNT" ]; then
     write_status "error" "SensibleFox" "Could not mount the Firefox disk image." 0 100
@@ -327,6 +331,10 @@ cp "\$PAYLOAD/policies.json"   "\$RES/distribution/policies.json"
 cp "\$PAYLOAD/autoconfig.js"   "\$RES/defaults/pref/autoconfig.js"
 cp "\$PAYLOAD/sensiblefox.cfg" "\$RES/sensiblefox.cfg"
 cp "\$PAYLOAD/userChrome.css"  "\$RES/sensiblefox/userChrome.css"
+
+if [ -n "\$CONSOLE_USER" ] && [ "\$CONSOLE_USER" != "root" ]; then
+    /usr/sbin/chown -R "\$CONSOLE_USER" "\$APP" 2>/dev/null || true
+fi
 
 write_status "done" "SensibleFox installed" "Firefox \$VERSION is ready to launch." 100 100
 sleep 1
@@ -374,3 +382,5 @@ echo ""
 echo "  ✓ Built dist/SensibleFox.pkg ($SIZE) — Firefox $FF_VERSION (download ~${FF_SIZE_MB} MB, installs ~${FF_INSTALLED_MB} MB)"
 echo "    Install: open dist/SensibleFox.pkg"
 echo "    Or:      sudo installer -pkg dist/SensibleFox.pkg -target /"
+echo "    Note:    To bypass macOS Gatekeeper for this unsigned package, run:"
+echo "             xattr -d com.apple.quarantine dist/SensibleFox.pkg"
