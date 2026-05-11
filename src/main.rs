@@ -40,9 +40,17 @@ struct Cli {
     #[arg(long)]
     app_dir: Option<PathBuf>,
 
-    /// Install policy-managed Firefox (injected directly into the app bundle)
+    /// Install policy-managed Firefox using macOS policy locations
     #[arg(long)]
     policied: bool,
+
+    /// Replace Firefox.app even when a valid copy is already installed
+    #[arg(long)]
+    replace_firefox: bool,
+
+    /// Install Firefox and system policy files only; skip user profile setup
+    #[arg(long)]
+    system_only: bool,
 
     /// Do not prompt for confirmation (e.g. for installer use)
     #[arg(long)]
@@ -90,20 +98,22 @@ fn main() {
         .profile_path
         .unwrap_or_else(profile::default_profile_path);
 
-    // If --policied is NOT requested, and profile exists, just launch.
-    if !cli.policied && profile_path.exists() {
+    // Normal launches can reuse an existing profile. Installer/profile-only
+    // runs intentionally refresh it so user.js, CSS, and extensions stay current.
+    if !cli.policied && !cli.profile_only && profile_path.exists() {
         println!(
             "{} Profile already exists at {}",
             style("→").blue().bold(),
             style(profile_path.display()).cyan()
         );
-        if using_default_path {
-            profile::register_default(&profile_path);
-        }
-        println!("  Launching existing profile...\n");
-        extensions::write_ublock_managed_storage();
-        match firefox::detect_or_download(&install_target, cli.unattended, cli.status_file.as_ref()) {
-            Ok(firefox_path) => launch(&firefox_path, &profile_path),
+
+        let firefox_path = match firefox::detect_or_download(
+            &install_target,
+            cli.unattended,
+            cli.replace_firefox,
+            cli.status_file.as_ref(),
+        ) {
+            Ok(path) => path,
             Err(e) => {
                 eprintln!(
                     "  {} {}\n  Install Firefox manually and re-run, or pass --app-dir.",
@@ -112,12 +122,25 @@ fn main() {
                 );
                 std::process::exit(1);
             }
+        };
+
+        if using_default_path {
+            profile::register_default(&profile_path, Some(firefox_path.as_path()));
         }
+        extensions::write_ublock_managed_storage(None);
+
+        println!("  Launching existing profile...\n");
+        launch(&firefox_path, &profile_path);
         return;
     }
 
     step("Detecting Firefox");
-    let firefox_path = match firefox::detect_or_download(&install_target, cli.unattended, cli.status_file.as_ref()) {
+    let firefox_path = match firefox::detect_or_download(
+        &install_target,
+        cli.unattended,
+        cli.replace_firefox,
+        cli.status_file.as_ref(),
+    ) {
         Ok(p) => p,
         Err(e) => {
             if cli.status_file.is_none() {
@@ -132,39 +155,101 @@ fn main() {
     };
 
     if cli.policied {
-        step("Applying policies to Firefox.app");
-        let app_path = install_target.app_path();
-        if let Err(e) = policy::apply_to_app(&app_path) {
+        step("Applying macOS Firefox policies");
+        write_status(
+            &cli.status_file,
+            "configure",
+            "Applying Firefox policies",
+            "Step 1 of 7: writing macOS policy files...",
+            15,
+        );
+        if let Err(e) = policy::apply_macos_policies() {
             eprintln!("  {} Failed to apply policies: {}", style("✗").red(), e);
             std::process::exit(1);
         }
 
         if cli.system {
             step("Configuring system-wide uBlock managed storage");
+            write_status(
+                &cli.status_file,
+                "configure",
+                "Applying Firefox policies",
+                "Step 2 of 7: writing system uBlock managed storage...",
+                25,
+            );
             if let Err(e) = policy::apply_system_managed_storage() {
                 eprintln!("  {} {}", style("!").yellow(), e);
             }
         }
+    }
 
-        // If running as root (installer), ensure the console user owns the app.
-        ensure_correct_ownership(&app_path);
+    if cli.system_only {
+        write_status(
+            &cli.status_file,
+            "configure",
+            "System files installed",
+            "System files are ready. Preparing the user profile...",
+            30,
+        );
+        return;
     }
 
     step("Creating profile");
-    profile::create(&profile_path);
+    write_status(
+        &cli.status_file,
+        "configure",
+        "Creating SensibleFox profile",
+        "Step 3 of 7: creating profile directories...",
+        35,
+    );
+    if let Err(e) = profile::create(&profile_path) {
+        fail_install(&cli.status_file, "Failed to create profile", &e);
+    }
 
     step("Writing preferences");
-    prefs::write(&profile_path);
+    write_status(
+        &cli.status_file,
+        "configure",
+        "Applying SensibleFox preferences",
+        "Step 4 of 7: writing and verifying user.js...",
+        50,
+    );
+    if let Err(e) = prefs::write(&profile_path) {
+        fail_install(&cli.status_file, "Failed to write preferences", &e);
+    }
 
     step("Writing userChrome CSS");
-    css::write(&profile_path);
+    write_status(
+        &cli.status_file,
+        "configure",
+        "Applying SensibleFox chrome",
+        "Step 5 of 7: writing and verifying userChrome.css...",
+        65,
+    );
+    if let Err(e) = css::write(&profile_path) {
+        fail_install(&cli.status_file, "Failed to write userChrome CSS", &e);
+    }
 
     step("Installing uBlock Origin");
-    extensions::install_ublock(&profile_path);
+    write_status(
+        &cli.status_file,
+        "configure",
+        "Installing uBlock Origin",
+        "Step 6 of 7: downloading extension and managed storage...",
+        78,
+    );
+    extensions::install_ublock(&profile_path, cli.status_file.as_ref());
 
     if using_default_path {
         step("Registering default profile");
-        profile::register_default(&profile_path);
+        write_status(
+            &cli.status_file,
+            "configure",
+            "Registering Firefox profile",
+            "Step 7 of 7: updating profiles.ini...",
+            92,
+        );
+        profile::register_default(&profile_path, Some(firefox_path.as_path()));
     }
 
     // Ensure profile is owned by user if we just created it as root.
@@ -176,15 +261,8 @@ fn main() {
             style("✓").green().bold(),
             style(profile_path.display()).cyan()
         );
-    } else if let Some(ref sf) = cli.status_file {
-        firefox::write_status(
-            sf,
-            "done",
-            "SensibleFox installed",
-            "Firefox is ready to launch.",
-            100,
-            100,
-        );
+    } else {
+        finish_status(&cli.status_file);
     }
 
     if !cli.profile_only {
@@ -196,6 +274,39 @@ fn main() {
             firefox_path.display(),
             profile_path.display()
         );
+    }
+}
+
+fn finish_status(status_file: &Option<PathBuf>) {
+    if let Some(sf) = status_file {
+        firefox::write_status(
+            sf,
+            "done",
+            "SensibleFox installed",
+            "Firefox is ready to launch.",
+            100,
+            100,
+        );
+    }
+}
+
+fn fail_install(status_file: &Option<PathBuf>, title: &str, detail: &str) -> ! {
+    if let Some(sf) = status_file {
+        firefox::write_status(sf, "error", title, detail, 0, 100);
+    }
+    eprintln!("  {} {}: {}", style("✗").red().bold(), title, detail);
+    std::process::exit(1);
+}
+
+fn write_status(
+    status_file: &Option<PathBuf>,
+    step: &str,
+    title: &str,
+    detail: &str,
+    progress: u64,
+) {
+    if let Some(sf) = status_file {
+        firefox::write_status(sf, step, title, detail, progress, 100);
     }
 }
 
@@ -217,7 +328,12 @@ fn is_root() -> bool {
         .arg("-u")
         .output()
         .ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse::<u32>()
+                .ok()
+        })
         .map(|uid| uid == 0)
         .unwrap_or(false)
 }

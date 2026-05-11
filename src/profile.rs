@@ -1,8 +1,33 @@
+use naive_cityhash::cityhash64;
 use console::style;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const PROFILE_NAME: &str = "sensiblefox";
+
+fn mozilla_install_hash_hex(install_parent_path: &str) -> String {
+    let trimmed = install_parent_path.trim_end_matches('/');
+    let utf16: Vec<u16> = trimmed.encode_utf16().collect();
+    let mut bytes = Vec::with_capacity(utf16.len() * 2);
+    for u in utf16 {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    let h: u64 = cityhash64(&bytes);
+    format!("{:X}", h)
+}
+
+fn install_parent_directory_for_hash(firefox_binary: &Path) -> Option<String> {
+    let resolved = fs::canonicalize(firefox_binary).unwrap_or_else(|_| firefox_binary.to_path_buf());
+    let parent = resolved.parent()?;
+    let mut s = parent.to_string_lossy().replace('\\', "/");
+    while s.ends_with('/') && s.len() > 1 {
+        s.pop();
+    }
+    if s.is_empty() {
+        return None;
+    }
+    Some(s)
+}
 
 pub fn firefox_root() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join("Library/Application Support/Firefox"))
@@ -15,48 +40,32 @@ pub fn default_profile_path() -> PathBuf {
         .join(PROFILE_NAME)
 }
 
-pub fn create(profile_path: &Path) {
+pub fn create(profile_path: &Path) -> Result<(), String> {
     // Basic sanity check — refuse to create profiles in obviously wrong places.
     let path_str = profile_path.to_string_lossy();
     if path_str == "/" || path_str == "/System" || path_str.starts_with("/System/") {
-        eprintln!(
-            "  {} Refusing to create profile at system path: {}",
-            style("✗").red(),
+        return Err(format!(
+            "refusing to create profile at system path: {}",
             profile_path.display()
-        );
-        return;
+        ));
     }
 
-    if let Err(e) = fs::create_dir_all(profile_path) {
-        eprintln!(
-            "  {} Failed to create profile directory: {e}",
-            style("✗").red()
-        );
-        return;
-    }
+    fs::create_dir_all(profile_path)
+        .map_err(|e| format!("failed to create profile directory: {e}"))?;
 
     let chrome_dir = profile_path.join("chrome");
-    if let Err(e) = fs::create_dir_all(&chrome_dir) {
-        eprintln!(
-            "  {} Failed to create chrome directory: {e}",
-            style("✗").red()
-        );
-        return;
-    }
+    fs::create_dir_all(&chrome_dir)
+        .map_err(|e| format!("failed to create chrome directory: {e}"))?;
 
     let ext_dir = profile_path.join("extensions");
-    if let Err(e) = fs::create_dir_all(&ext_dir) {
-        eprintln!(
-            "  {} Failed to create extensions directory: {e}",
-            style("✗").red()
-        );
-        return;
-    }
+    fs::create_dir_all(&ext_dir)
+        .map_err(|e| format!("failed to create extensions directory: {e}"))?;
 
     println!("  {} Profile directory created", style("✓").green());
+    Ok(())
 }
 
-pub fn register_default(profile_path: &Path) {
+pub fn register_default(profile_path: &Path, firefox_binary: Option<&Path>) {
     let Some(root) = firefox_root() else { return };
     let Ok(rel) = profile_path.strip_prefix(&root) else {
         eprintln!(
@@ -78,6 +87,17 @@ pub fn register_default(profile_path: &Path) {
     let profiles_ini = root.join("profiles.ini");
     let mut ini = read_ini(&profiles_ini);
     upsert_profile(&mut ini, &rel_str);
+    if let Some(bin) = firefox_binary {
+        if let Some(parent) = install_parent_directory_for_hash(bin) {
+            let hash_hex = mozilla_install_hash_hex(&parent);
+            ensure_install_section(&mut ini, &hash_hex);
+        } else {
+            eprintln!(
+                "  {} Could not resolve Firefox install directory for profile hash",
+                style("!").yellow()
+            );
+        }
+    }
     point_installs_at(&mut ini, &rel_str);
     ensure_general(&mut ini);
     if let Err(e) = fs::write(&profiles_ini, write_ini(&ini)) {
@@ -88,19 +108,14 @@ pub fn register_default(profile_path: &Path) {
         return;
     }
 
-    let installs_ini = root.join("installs.ini");
-    if installs_ini.exists() {
-        let mut ini = read_ini(&installs_ini);
-        point_installs_at(&mut ini, &rel_str);
-        if let Err(e) = fs::write(&installs_ini, write_ini(&ini)) {
-            eprintln!(
-                "  {} Failed to write installs.ini: {e}",
-                style("!").yellow()
-            );
-        }
+    if firefox_binary.is_some() {
+        write_install_sections_mirror(&root, &ini);
     }
 
-    println!("  {} Set as default profile in profiles.ini", style("✓").green());
+    println!(
+        "  {} Set as default profile in profiles.ini",
+        style("✓").green()
+    );
 }
 
 pub fn unregister(profile_path: &Path) {
@@ -171,6 +186,35 @@ fn write_ini(ini: &Ini) -> String {
     out
 }
 
+fn ensure_install_section(ini: &mut Ini, hash_hex: &str) {
+    let name = format!("Install{}", hash_hex);
+    if ini.sections.iter().any(|(n, _)| n == &name) {
+        return;
+    }
+    ini.sections.push((name, Vec::new()));
+}
+
+fn write_install_sections_mirror(root: &Path, ini: &Ini) {
+    let filtered = Ini {
+        sections: ini
+            .sections
+            .iter()
+            .filter(|(name, _)| name.starts_with("Install"))
+            .cloned()
+            .collect(),
+    };
+    if filtered.sections.is_empty() {
+        return;
+    }
+    let installs_ini = root.join("installs.ini");
+    if let Err(e) = fs::write(&installs_ini, write_ini(&filtered)) {
+        eprintln!(
+            "  {} Failed to write installs.ini: {e}",
+            style("!").yellow()
+        );
+    }
+}
+
 fn get<'a>(kv: &'a [(String, String)], key: &str) -> Option<&'a str> {
     kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }
@@ -221,7 +265,10 @@ fn upsert_profile(ini: &mut Ini, rel_path: &str) {
 fn next_profile_index(ini: &Ini) -> usize {
     ini.sections
         .iter()
-        .filter_map(|(n, _)| n.strip_prefix("Profile").and_then(|s| s.parse::<usize>().ok()))
+        .filter_map(|(n, _)| {
+            n.strip_prefix("Profile")
+                .and_then(|s| s.parse::<usize>().ok())
+        })
         .max()
         .map(|m| m + 1)
         .unwrap_or(0)
@@ -267,5 +314,26 @@ fn point_installs_at(ini: &mut Ini, rel_path: &str) {
         }
         set(kv, "Default", rel_path);
         set(kv, "Locked", "1");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mozilla_install_hash_matches_public_vectors() {
+        assert_eq!(
+            mozilla_install_hash_hex("/Applications/Firefox.app/Contents/MacOS"),
+            "2656FF1E876E9973"
+        );
+        assert_eq!(
+            mozilla_install_hash_hex("/usr/lib/firefox"),
+            "4F96D1932A9F858E"
+        );
+        assert_eq!(
+            mozilla_install_hash_hex("/opt/firefox"),
+            "6AFDA46A1A8AD48"
+        );
     }
 }

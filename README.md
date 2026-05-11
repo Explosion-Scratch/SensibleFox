@@ -28,7 +28,24 @@ SensibleFox is an opinionated, zero config Firefox build for MacOS ([See compari
 
 ## Install
 
-Download the latest `.pkg` from the [releases page](https://github.com/sensiblefox/firebuilder/releases) and install it like any other macOS application. Note: Gatekeeper may block the installation as Firefox can't be correctly notarized by me.
+Download the latest `.pkg` from the [releases page](https://github.com/sensiblefox/firebuilder/releases) and install it like any other macOS application.
+
+The installer preserves Mozilla's Firefox signature. SensibleFox does not patch `Firefox.app`; it installs supported macOS Firefox policies, uBlock managed storage, and a configured user profile. If the package is not Developer ID signed and notarized, macOS may still warn about the SensibleFox installer package itself when it was downloaded from the internet. That warning is separate from Firefox's signature.
+
+## Build a PKG
+
+```sh
+./scripts/build-pkg.sh
+```
+
+Unsigned packages work for local testing and can usually be opened with right-click -> Open. For fully smooth Gatekeeper behavior, build with Apple Developer ID credentials:
+
+```sh
+DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (TEAMID)" \
+DEVELOPER_ID_INSTALLER="Developer ID Installer: Your Name (TEAMID)" \
+NOTARYTOOL_PROFILE="your-notarytool-profile" \
+./scripts/build-pkg.sh
+```
 
 ## CLI options
 
@@ -38,3 +55,6 @@ Download the latest `.pkg` from the [releases page](https://github.com/sensiblef
 | `--profile-path <dir>` | Custom output path for the profile          |
 | `--update-upstream`    | Re-fetch Betterfox/arkenfox prefs           |
 | `--clean`              | Pick which profiles to delete               |
+| `--policied`           | Install macOS Firefox policy files          |
+| `--system`             | Install/use `/Applications/Firefox.app`     |
+| `--replace-firefox`    | Reinstall Firefox even if it looks valid    |

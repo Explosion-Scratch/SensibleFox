@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", features = ["blocking"] }
+serde_json = "1"
 tempfile = "3"
 dirs = "6"
 zip = "2"
@@ -19,6 +20,7 @@ indicatif = "0.17"
 console = "0.15"
 dialoguer = "0.12.0"
 ctrlc = "3"
+naive-cityhash = "0.2.0"
 
 [profile.release]
 strip = true

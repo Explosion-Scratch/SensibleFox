@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-10 13:49:58
+// Generated: 2026-05-11 13:35:37
 
 
 // ═══════════════════════════════════════════
@@ -3107,8 +3107,8 @@ user_pref("browser.newtabpage.activity-stream.feeds.section.highlights", false);
 user_pref("browser.newtabpage.activity-stream.feeds.snippets", false);
 
 // ═══════════════════════════════════════════
-// EXTENSION SIGNATURES — allow unsigned add-ons
-// (effective via autoconfig/sensiblefox.cfg in stable Firefox)
+// EXTENSION SIGNATURES — developer-channel compatibility
+// Stable Firefox may ignore these; SensibleFox's bundled add-ons are signed.
 // ═══════════════════════════════════════════
 user_pref("xpinstall.signatures.required", false);
 user_pref("xpinstall.whitelist.required", false);

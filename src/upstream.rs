@@ -22,18 +22,14 @@ const BETTERFOX_URLS: &[(&str, &str)] = &[
     ),
 ];
 
-const ARKENFOX_URL: &str =
-    "https://raw.githubusercontent.com/arkenfox/user.js/master/user.js";
+const ARKENFOX_URL: &str = "https://raw.githubusercontent.com/arkenfox/user.js/master/user.js";
 
 const MAX_FETCH_RETRIES: u32 = 2;
 
 pub fn fetch_all() {
     let out_dir = upstream_dir();
     if let Err(e) = fs::create_dir_all(&out_dir) {
-        eprintln!(
-            "  {} Failed to create generated dir: {e}",
-            style("✗").red()
-        );
+        eprintln!("  {} Failed to create generated dir: {e}", style("✗").red());
         return;
     }
 
@@ -43,18 +39,12 @@ pub fn fetch_all() {
     {
         Ok(c) => c,
         Err(e) => {
-            eprintln!(
-                "  {} Failed to build HTTP client: {e}",
-                style("✗").red()
-            );
+            eprintln!("  {} Failed to build HTTP client: {e}", style("✗").red());
             return;
         }
     };
 
-    println!(
-        "{} Fetching upstream prefs...\n",
-        style("→").blue().bold()
-    );
+    println!("{} Fetching upstream prefs...\n", style("→").blue().bold());
 
     for (name, url) in BETTERFOX_URLS {
         print!("  {} Betterfox/{name}... ", style("↓").cyan());
@@ -101,10 +91,7 @@ pub fn fetch_all() {
     );
 }
 
-fn fetch_with_retry(
-    client: &reqwest::blocking::Client,
-    url: &str,
-) -> Result<String, String> {
+fn fetch_with_retry(client: &reqwest::blocking::Client, url: &str) -> Result<String, String> {
     let mut last_err = String::new();
 
     for attempt in 1..=MAX_FETCH_RETRIES {
@@ -133,10 +120,7 @@ fn merge_upstream(dir: &Path) {
     let mut merged = String::new();
     merged.push_str("// sensiblefox — upstream prefs (auto-generated)\n");
     merged.push_str("// Pulled from Betterfox + arkenfox. Do not edit.\n");
-    merged.push_str(&format!(
-        "// Generated: {}\n\n",
-        chrono_like_now()
-    ));
+    merged.push_str(&format!("// Generated: {}\n\n", chrono_like_now()));
 
     let files = [
         "betterfox-fastfox.js",
@@ -157,10 +141,7 @@ fn merge_upstream(dir: &Path) {
 
     let out = dir.join("upstream-merged.js");
     fs::write(&out, &merged).expect("failed to write merged upstream prefs");
-    println!(
-        "  {} Merged into upstream-merged.js",
-        style("✓").green()
-    );
+    println!("  {} Merged into upstream-merged.js", style("✓").green());
 }
 
 fn upstream_dir() -> PathBuf {

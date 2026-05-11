@@ -7,15 +7,10 @@ use std::time::Duration;
 
 const FIREFOX_DMG_URL: &str =
     "https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=en-US";
+const FIREFOX_VERSION_URL: &str = "https://product-details.mozilla.org/1.0/firefox_versions.json";
 
 const MAX_DOWNLOAD_RETRIES: u32 = 3;
 
-/// Progress bar phase boundaries (percentage points).
-///   Download:  0% → 50%  (scaled from HTTP content-length)
-///   Mount:    50% → 60%  (indeterminate sub-step)
-///   Copy:     60% → 100% (scaled from `du` of destination vs expected)
-const DL_END: u64 = 50;
-const MOUNT_END: u64 = 60;
 const TOTAL: u64 = 100;
 
 // ── DMG mount RAII guard ──────────────────────────────────────────────
@@ -58,8 +53,8 @@ impl DmgMount {
             }
         }
 
-        let mount_point = mount_point
-            .ok_or_else(|| "Could not locate mounted Firefox volume".to_string())?;
+        let mount_point =
+            mount_point.ok_or_else(|| "Could not locate mounted Firefox volume".to_string())?;
 
         Ok(DmgMount { mount_point })
     }
@@ -128,12 +123,12 @@ impl InstallTarget {
 pub fn detect_or_download(
     target: &InstallTarget,
     unattended: bool,
+    replace_existing: bool,
     status_file: Option<&PathBuf>,
 ) -> Result<PathBuf, String> {
     let app_path = target.app_path();
     let bin = target.bin_path();
 
-    // 1 — Already installed at the target location.
     if app_path.exists() {
         let version = read_firefox_version(&app_path);
         let version_display = version.as_deref().unwrap_or("unknown version");
@@ -141,80 +136,118 @@ pub fn detect_or_download(
         if status_file.is_none() {
             println!(
                 "  {} Firefox {} found at {}",
-                style("!").yellow(),
+                style("✓").green(),
                 version_display,
                 style(app_path.display()).cyan()
             );
-            println!(
-                "    SensibleFox needs a policy-managed Firefox so its configuration applies."
-            );
         }
 
-        let replace = if unattended {
-            true
-        } else {
-            dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                .with_prompt(format!(
-                    "Replace existing Firefox {} with a fresh policy-managed install?",
-                    version_display
-                ))
-                .default(true)
-                .interact()
-                .unwrap_or(false)
-        };
-
-        if replace {
+        if !bin.exists() {
             if status_file.is_none() {
-                println!("  {} Removing existing Firefox.app...", style("↻").cyan());
+                println!(
+                    "  {} Firefox.app is incomplete — reinstalling...",
+                    style("!").yellow()
+                );
             }
-            kill_firefox();
-            if let Err(e) = std::fs::remove_dir_all(&app_path) {
-                return Err(format!("Failed to remove existing Firefox.app: {e}"));
-            }
-            download_and_install(target, status_file)?;
-            if bin.exists() {
+            replace_app(target, status_file)?;
+            return installed_bin(&bin);
+        }
+
+        match verify_app_signature(&app_path) {
+            SignatureState::Valid => {}
+            SignatureState::Invalid(reason) => {
                 if status_file.is_none() {
-                    println!("  {} Firefox installed", style("✓").green());
+                    eprintln!(
+                        "  {} Firefox.app signature is invalid.",
+                        style("!").yellow()
+                    );
+                    eprintln!(
+                        "    {}",
+                        reason
+                            .lines()
+                            .next()
+                            .unwrap_or("codesign verification failed")
+                    );
                 }
-                return Ok(bin);
+                let repair = replace_existing
+                    || unattended
+                    || dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                        .with_prompt("Repair Firefox with a fresh Mozilla-signed copy?")
+                        .default(true)
+                        .interact()
+                        .unwrap_or(false);
+                if repair {
+                    replace_app(target, status_file)?;
+                    return installed_bin(&bin);
+                }
             }
-            return Err("Firefox binary not found after install".to_string());
-        } else {
-            println!("  {} Keeping existing Firefox", style("→").blue());
-            if bin.exists() {
-                return Ok(bin);
+            SignatureState::Unknown(reason) => {
+                if status_file.is_none() {
+                    eprintln!(
+                        "  {} Could not verify Firefox.app signature: {}",
+                        style("!").yellow(),
+                        reason
+                    );
+                }
             }
-            return Err(format!(
-                "Firefox.app exists at {} but the binary is missing",
-                app_path.display()
-            ));
+        }
+
+        if replace_existing {
+            replace_app(target, status_file)?;
+            return installed_bin(&bin);
+        }
+
+        return Ok(bin);
+    }
+
+    // A plain CLI run can reuse Firefox from a standard location. Explicit
+    // installer targets should install exactly where the target says.
+    if matches!(target, InstallTarget::User) {
+        if let Some(p) = which_firefox() {
+            if status_file.is_none() {
+                println!("  {} Firefox found at {}", style("✓").green(), p.display());
+            }
+            return Ok(p);
         }
     }
 
-    // 2 — Check PATH as a fallback.
-    if let Some(p) = which_firefox() {
-        if status_file.is_none() {
-            println!("  {} Firefox found at {}", style("✓").green(), p.display());
-        }
-        return Ok(p);
-    }
-
-    // 3 — Download & install.
     if status_file.is_none() {
-        println!(
-            "  {} Firefox not found — downloading...",
-            style("↓").cyan()
-        );
+        println!("  {} Firefox not found — downloading...", style("↓").cyan());
     }
     download_and_install(target, status_file)?;
+    installed_bin(&bin)
+}
 
-    if bin.exists() {
-        if status_file.is_none() {
-            println!("  {} Firefox installed", style("✓").green());
-        }
-        Ok(bin)
+fn replace_app(target: &InstallTarget, status_file: Option<&PathBuf>) -> Result<(), String> {
+    let app_path = target.app_path();
+
+    if status_file.is_none() {
+        println!("  {} Installing fresh Firefox.app...", style("↻").cyan());
+    }
+
+    kill_firefox();
+    remove_existing_app(&app_path)?;
+    download_and_install(target, status_file)
+}
+
+fn remove_existing_app(app_path: &Path) -> Result<(), String> {
+    if !app_path.exists() {
+        return Ok(());
+    }
+
+    if app_path.is_dir() {
+        std::fs::remove_dir_all(app_path)
     } else {
-        Err("Firefox installation failed. Install manually: brew install --cask firefox".to_string())
+        std::fs::remove_file(app_path)
+    }
+    .map_err(|e| format!("Failed to remove existing {}: {e}", app_path.display()))
+}
+
+fn installed_bin(bin: &Path) -> Result<PathBuf, String> {
+    if bin.exists() {
+        Ok(bin.to_path_buf())
+    } else {
+        Err("Firefox binary not found after install".to_string())
     }
 }
 
@@ -231,7 +264,12 @@ fn download_and_install(
     download_dmg_with_retry(&dmg_path, status_file)?;
 
     if let Some(sf) = status_file {
-        write_status(sf, "mount", "Installing Firefox", "Mounting disk image…", MOUNT_END, 100);
+        write_status_indeterminate(
+            sf,
+            "mount",
+            "Installing Firefox",
+            "Mounting the downloaded disk image...",
+        );
     }
 
     let mount = DmgMount::attach(&dmg_path)?;
@@ -252,6 +290,7 @@ fn download_dmg_with_retry(
         .build()
         .map_err(|e| format!("failed to build HTTP client: {e}"))?;
 
+    let firefox_version = fetch_latest_firefox_version(&client).unwrap_or_else(|| "latest".into());
     let mut last_err = String::new();
 
     for attempt in 1..=MAX_DOWNLOAD_RETRIES {
@@ -268,14 +307,21 @@ fn download_dmg_with_retry(
             std::thread::sleep(backoff);
         }
 
-        match download_dmg(&client, dmg_path, status_file) {
+        match download_dmg(&client, dmg_path, status_file, &firefox_version) {
             Ok(()) => return Ok(()),
             Err(e) => last_err = e,
         }
     }
 
     if let Some(sf) = status_file {
-        write_status(sf, "error", "SensibleFox", "Failed to download Firefox. Check connection.", 0, 100);
+        write_status(
+            sf,
+            "error",
+            "SensibleFox",
+            "Failed to download Firefox. Check connection.",
+            0,
+            100,
+        );
     }
 
     Err(format!(
@@ -287,6 +333,7 @@ fn download_dmg(
     client: &reqwest::blocking::Client,
     dmg_path: &std::path::Path,
     status_file: Option<&PathBuf>,
+    firefox_version: &str,
 ) -> Result<(), String> {
     let response = client
         .get(FIREFOX_DMG_URL)
@@ -299,6 +346,20 @@ fn download_dmg(
     }
 
     let total_bytes = response.content_length().unwrap_or(0);
+    let download_title = if firefox_version == "latest" {
+        "Downloading Firefox".to_string()
+    } else {
+        format!("Downloading Firefox {firefox_version}")
+    };
+
+    if let Some(sf) = status_file {
+        let detail = if total_bytes > 0 {
+            format!("0 MB of {} MB", bytes_to_mb(total_bytes))
+        } else {
+            "Starting download...".to_string()
+        };
+        write_status(sf, "download", &download_title, &detail, 0, 100);
+    }
 
     let pb = if status_file.is_none() {
         let pb = ProgressBar::new(TOTAL);
@@ -308,7 +369,7 @@ fn download_dmg(
                 .unwrap()
                 .progress_chars("█▓░"),
         );
-        pb.set_message("Downloading Firefox…");
+        pb.set_message(download_title.clone());
         pb.set_position(0);
         Some(pb)
     } else {
@@ -316,8 +377,8 @@ fn download_dmg(
     };
 
     let mut reader = response;
-    let mut file = std::fs::File::create(dmg_path)
-        .map_err(|e| format!("failed to create DMG file: {e}"))?;
+    let mut file =
+        std::fs::File::create(dmg_path).map_err(|e| format!("failed to create DMG file: {e}"))?;
     let mut downloaded: u64 = 0;
     let mut buf = [0u8; 65536];
 
@@ -335,53 +396,37 @@ fn download_dmg(
         downloaded += n as u64;
 
         if total_bytes > 0 {
-            let dl_pct = ((downloaded * DL_END) / total_bytes).min(DL_END);
+            let dl_pct = ((downloaded * TOTAL) / total_bytes).min(TOTAL);
+            let detail = format!(
+                "{} MB of {} MB",
+                bytes_to_mb(downloaded),
+                bytes_to_mb(total_bytes)
+            );
             if let Some(ref pb) = pb {
                 pb.set_position(dl_pct);
-                pb.set_message(format!(
-                    "Downloading Firefox — {} / {} MB",
-                    downloaded / (1024 * 1024),
-                    total_bytes / (1024 * 1024)
-                ));
+                pb.set_message(format!("{download_title} - {detail}"));
             }
             if let Some(sf) = status_file {
                 if dl_pct > last_status_pct {
-                    write_status(
-                        sf,
-                        "download",
-                        "Downloading Firefox",
-                        &format!(
-                            "{} MB of {} MB",
-                            downloaded / (1024 * 1024),
-                            total_bytes / (1024 * 1024)
-                        ),
-                        dl_pct,
-                        100,
-                    );
+                    write_status(sf, "download", &download_title, &detail, dl_pct, 100);
                     last_status_pct = dl_pct;
                 }
             }
-        } else if let Some(ref pb) = pb {
-            pb.set_message(format!(
-                "Downloading Firefox — {} MB",
-                downloaded / (1024 * 1024)
-            ));
+        } else {
+            let detail = format!("{} MB downloaded", bytes_to_mb(downloaded));
+            if let Some(ref pb) = pb {
+                pb.set_message(format!("{download_title} - {detail}"));
+            }
+            if let Some(sf) = status_file {
+                write_status_indeterminate(sf, "download", &download_title, &detail);
+            }
         }
     }
     drop(file);
 
     if let Some(ref pb) = pb {
-        pb.set_position(DL_END);
-        pb.set_message("Mounting disk image…");
-    }
-
-    // Brief indeterminate mount phase for visual smoothness.
-    let mount_steps = MOUNT_END - DL_END;
-    for i in 0..mount_steps {
-        if let Some(ref pb) = pb {
-            pb.set_position(DL_END + i);
-        }
-        std::thread::sleep(Duration::from_millis(50));
+        pb.set_position(TOTAL);
+        pb.set_message("Firefox download complete");
     }
 
     if let Some(pb) = pb {
@@ -399,7 +444,7 @@ fn copy_app(
 
     // Remove any partial leftover from a previous failed copy.
     if dest.exists() {
-        std::fs::remove_dir_all(&dest).ok();
+        remove_existing_app(&dest).ok();
     }
 
     // Ensure parent directory exists.
@@ -418,11 +463,8 @@ fn copy_app(
                 .unwrap()
                 .progress_chars("█▓░"),
         );
-        pb.set_position(MOUNT_END);
-        pb.set_message(format!(
-            "Copying Firefox.app to {}…",
-            target.display_name()
-        ));
+        pb.set_position(0);
+        pb.set_message(format!("Copying Firefox.app to {}…", target.display_name()));
         Some(pb)
     } else {
         None
@@ -434,22 +476,18 @@ fn copy_app(
         if let Some(pb) = pb {
             pb.finish_and_clear();
         }
-        return Err(
-            "Cannot install to /Applications in a non-GUI session.\n\
+        return Err("Cannot install to /Applications in a non-GUI session.\n\
              Run with --app-dir ~/Applications, or run: sudo sensiblefox"
-                .into(),
-        );
+            .into());
     }
 
     // Start the copy.
     let mut child = if needs_elevation {
         // Use osascript to get admin privileges via the native macOS dialog.
-        let user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
         let script = format!(
-            "do shell script \"ditto '{0}' '{1}' && xattr -r -d com.apple.quarantine '{1}' >/dev/null 2>&1 || true && chown -R '{2}' '{1}' >/dev/null 2>&1 || true\" with administrator privileges",
+            "do shell script \"ditto '{0}' '{1}'\" with administrator privileges",
             src_app.replace('\'', "'\\''"),
-            dest.to_string_lossy().replace('\'', "'\\''"),
-            user.replace('\'', "'\\''")
+            dest.to_string_lossy().replace('\'', "'\\''")
         );
         Command::new("osascript")
             .args(["-e", &script])
@@ -457,20 +495,14 @@ fn copy_app(
             .map_err(|e| format!("failed to launch osascript: {e}"))?
     } else {
         // ditto preserves code signatures (unlike cp -R).
-        Command::new("bash")
-            .arg("-c")
-            .arg(format!(
-                "ditto '{}' '{}' && xattr -r -d com.apple.quarantine '{}' >/dev/null 2>&1 || true",
-                src_app.replace('\'', "'\\''"),
-                dest.to_string_lossy().replace('\'', "'\\''"),
-                dest.to_string_lossy().replace('\'', "'\\''")
-            ))
+        Command::new("ditto")
+            .arg(src_app)
+            .arg(&dest)
             .spawn()
-            .map_err(|e| format!("failed to launch bash: {e}"))?
+            .map_err(|e| format!("failed to launch ditto: {e}"))?
     };
 
     // Progress polling thread.
-    let copy_range = TOTAL - MOUNT_END;
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let poll_dest = dest.clone();
     let poll_pb = pb.clone();
@@ -485,14 +517,13 @@ fn copy_app(
             if poll_dest.exists() {
                 let copied = du_bytes(&poll_dest);
                 if expected_bytes > 0 {
-                    let pct = MOUNT_END + (copied * copy_range) / expected_bytes;
-                    let pct = pct.min(TOTAL - 1);
+                    let pct = ((copied * TOTAL) / expected_bytes).min(TOTAL - 1);
                     if let Some(ref pb) = poll_pb {
                         pb.set_position(pct);
                         pb.set_message(format!(
                             "Copying Firefox — {} / {} MB",
-                            copied / (1024 * 1024),
-                            expected_bytes / (1024 * 1024)
+                            bytes_to_mb(copied),
+                            bytes_to_mb(expected_bytes)
                         ));
                     }
                     if let Some(ref sf) = poll_status_file {
@@ -501,7 +532,12 @@ fn copy_app(
                                 sf,
                                 "copy",
                                 "Installing Firefox",
-                                &format!("Copied {} MB to /Applications…", copied / (1024 * 1024)),
+                                &format!(
+                                    "Copied {} MB of {} MB to {}...",
+                                    bytes_to_mb(copied),
+                                    bytes_to_mb(expected_bytes),
+                                    destination_label(&poll_dest)
+                                ),
                                 pct,
                                 100,
                             );
@@ -527,20 +563,66 @@ fn copy_app(
     let success = cp_result.map(|s| s.success()).unwrap_or(false);
     if !success || !dest.join("Contents/MacOS/firefox").exists() {
         if let Some(sf) = status_file {
-            write_status(sf, "error", "SensibleFox", "Failed to copy Firefox to /Applications.", 0, 100);
+            write_status(
+                sf,
+                "error",
+                "SensibleFox",
+                "Failed to copy Firefox to /Applications.",
+                0,
+                100,
+            );
         }
         if needs_elevation {
-            return Err(
-                "Failed to copy Firefox.app to /Applications.\n\
+            return Err("Failed to copy Firefox.app to /Applications.\n\
                  The admin authorization may have been cancelled, or the copy failed.\n\
                  Try installing to ~/Applications instead, or install manually:\n\
                  brew install --cask firefox"
-                    .to_string(),
-            );
+                .to_string());
         }
         return Err(
             "Failed to copy Firefox.app. Install manually: brew install --cask firefox".to_string(),
         );
+    }
+
+    match verify_app_signature(&dest) {
+        SignatureState::Valid => {}
+        SignatureState::Invalid(reason) => {
+            return Err(format!(
+                "Firefox.app copied, but its code signature is invalid: {}",
+                reason
+                    .lines()
+                    .next()
+                    .unwrap_or("codesign verification failed")
+            ));
+        }
+        SignatureState::Unknown(reason) => {
+            if status_file.is_none() {
+                eprintln!(
+                    "  {} Could not verify copied Firefox.app signature: {}",
+                    style("!").yellow(),
+                    reason
+                );
+            }
+        }
+    }
+
+    match assess_gatekeeper(&dest) {
+        SignatureState::Valid => {}
+        SignatureState::Invalid(reason) => {
+            return Err(format!(
+                "Firefox.app copied, but Gatekeeper rejected it: {}",
+                reason.lines().next().unwrap_or("spctl assessment failed")
+            ));
+        }
+        SignatureState::Unknown(reason) => {
+            if status_file.is_none() {
+                eprintln!(
+                    "  {} Could not run Gatekeeper assessment for Firefox.app: {}",
+                    style("!").yellow(),
+                    reason
+                );
+            }
+        }
     }
 
     Ok(())
@@ -557,7 +639,26 @@ pub fn write_status(path: &Path, step: &str, title: &str, detail: &str, progress
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, content).is_ok() {
         let _ = std::fs::rename(&tmp, path);
-        let _ = Command::new("chmod").args(["644", &path.to_string_lossy()]).status();
+        let _ = Command::new("chmod")
+            .args(["644", &path.to_string_lossy()])
+            .status();
+    }
+}
+
+pub fn write_status_indeterminate(path: &Path, step: &str, title: &str, detail: &str) {
+    let mut content = String::new();
+    content.push_str(&format!("step={}\n", step));
+    content.push_str(&format!("title={}\n", title));
+    content.push_str(&format!("detail={}\n", detail));
+    content.push_str("progress=-1\n");
+    content.push_str("total=-1\n");
+
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, content).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+        let _ = Command::new("chmod")
+            .args(["644", &path.to_string_lossy()])
+            .status();
     }
 }
 
@@ -566,12 +667,78 @@ fn is_root() -> bool {
         .arg("-u")
         .output()
         .ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse::<u32>()
+                .ok()
+        })
         .map(|uid| uid == 0)
         .unwrap_or(false)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+enum SignatureState {
+    Valid,
+    Invalid(String),
+    Unknown(String),
+}
+
+fn verify_app_signature(app_path: &Path) -> SignatureState {
+    let output = Command::new("codesign")
+        .args(["--verify", "--deep", "--strict", "--verbose=2"])
+        .arg(app_path)
+        .output();
+
+    match output {
+        Ok(result) if result.status.success() => SignatureState::Valid,
+        Ok(result) => {
+            let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&result.stdout).trim().to_string();
+            let reason = if stderr.is_empty() { stdout } else { stderr };
+            SignatureState::Invalid(if reason.is_empty() {
+                "codesign verification failed".to_string()
+            } else {
+                reason
+            })
+        }
+        Err(e) => SignatureState::Unknown(e.to_string()),
+    }
+}
+
+fn assess_gatekeeper(app_path: &Path) -> SignatureState {
+    let output = Command::new("spctl")
+        .args(["--assess", "--type", "execute", "--verbose=2"])
+        .arg(app_path)
+        .output();
+
+    match output {
+        Ok(result) if result.status.success() => SignatureState::Valid,
+        Ok(result) => {
+            let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&result.stdout).trim().to_string();
+            let reason = if stderr.is_empty() { stdout } else { stderr };
+            SignatureState::Invalid(if reason.is_empty() {
+                "spctl assessment failed".to_string()
+            } else {
+                reason
+            })
+        }
+        Err(e) => SignatureState::Unknown(e.to_string()),
+    }
+}
+
+fn fetch_latest_firefox_version(client: &reqwest::blocking::Client) -> Option<String> {
+    let text = client.get(FIREFOX_VERSION_URL).send().ok()?.text().ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+
+    value
+        .get("LATEST_FIREFOX_VERSION")
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| v.to_string())
+}
 
 fn read_firefox_version(app_path: &Path) -> Option<String> {
     let plist = app_path.join("Contents/Info.plist");
@@ -592,6 +759,16 @@ fn read_firefox_version(app_path: &Path) -> Option<String> {
     }
 }
 
+fn bytes_to_mb(bytes: u64) -> u64 {
+    bytes / (1024 * 1024)
+}
+
+fn destination_label(dest: &Path) -> String {
+    dest.parent()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| dest.display().to_string())
+}
+
 fn kill_firefox() {
     // Send SIGTERM to all Firefox-family processes.
     for name in &["firefox", "Firefox", "firefox-bin", "plugin-container"] {
@@ -601,9 +778,13 @@ fn kill_firefox() {
     // Wait up to 10 s for processes to actually die.
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
-        let any_alive = ["firefox", "Firefox"]
-            .iter()
-            .any(|name| Command::new("pgrep").args(["-x", name]).status().map(|s| s.success()).unwrap_or(false));
+        let any_alive = ["firefox", "Firefox"].iter().any(|name| {
+            Command::new("pgrep")
+                .args(["-x", name])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        });
         if !any_alive {
             return;
         }

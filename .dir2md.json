@@ -1,0 +1,26 @@
+{
+  "selectedFiles": [
+    "src/css.rs",
+    "src/main.rs",
+    "src/prefs.rs",
+    "src/policy.rs",
+    "src/firefox.rs",
+    "src/profile.rs",
+    "src/upstream.rs",
+    "src/extensions.rs",
+    "scripts/generate-prefs.sh",
+    "scripts/release-to-github.sh",
+    "scripts/build-pkg.sh",
+    "build.rs",
+    "assets/installer/installer.applescript",
+    "assets/installer/Distribution.xml",
+    "assets/installer/conclusion.html",
+    "assets/installer/welcome.html",
+    "assets/autoconfig.js",
+    "assets/policies.json",
+    "assets/sensiblefox.cfg.tail"
+  ],
+  "timestamp": "2026-05-11T01:15:12.562Z",
+  "cwd": "/Users/tjs/Documents/.coding/repos/firebuilder",
+  "prompt": "Review how this code interacts with gatekeeper. Ensure that gatekeeper does not block install. Is there a way we can build the app without tampering with Firefox's signature? I want the PKG to be easily runnable by anyone without SIP / Gatekeeper enabled. Look in depth at the code and plan out. I want this to be a production ready install method for firefox that any laypeople can use. I don't want anyone to need to have XCode Command line tools installed or anything either. Don't sacrifice any features. I still need to be able to set flags, install user chrome, configure policies. Do research"
+}

@@ -60,7 +60,7 @@
 <h1>SensibleFox</h1>
 <p class="sub">An opinionated, zero-config Firefox for macOS.</p>
 
-<p>This installer will download <span class="version">Firefox {{FF_VERSION}}</span> and configure it with the SensibleFox defaults:</p>
+<p>This installer will use an existing Mozilla-signed Firefox, or download <span class="version">Firefox {{FF_VERSION}}</span> if Firefox is missing or damaged. SensibleFox configures it without modifying Firefox.app:</p>
 
 <ul>
   <li>uBlock Origin with default filters + ClearURLs</li>
@@ -75,6 +75,6 @@
   <div><span class="label">Installed</span><span class="num">~{{FF_INSTALLED_MB}} MB</span></div>
 </div>
 
-<p class="meta">A separate progress window will appear during the download. Existing Firefox installs at /Applications/Firefox.app will be replaced.</p>
+<p class="meta">A separate progress window will appear during setup. Existing valid Firefox installs at /Applications/Firefox.app are preserved.</p>
 </body>
 </html>

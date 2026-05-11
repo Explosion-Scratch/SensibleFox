@@ -4,7 +4,7 @@
 --   step=init|download|mount|copy|configure|done|error
 --   title=<string>
 --   detail=<string>
---   progress=<int>     -- completed steps (0..total), -1 = indeterminate
+--   progress=<int>     -- completed phase percent (0..total), -1 = indeterminate
 --   total=<int>        -- total steps, -1 = indeterminate
 
 property statusFile : "/tmp/sensiblefox-install.status"
@@ -45,7 +45,11 @@ on run
 			end if
 			
 			if currentStep is "done" then
-				delay 0.6
+				set progress description to currentTitle
+				set progress additional description to currentDetail
+				set progress total steps to 100
+				set progress completed steps to 100
+				delay 0.3
 				exit repeat
 			else if currentStep is "error" then
 				display alert "SensibleFox install failed" message currentDetail as critical
@@ -55,6 +59,7 @@ on run
 			delay pollDelay
 		end if
 	end repeat
+	tell me to quit
 end run
 
 on readStatus()
