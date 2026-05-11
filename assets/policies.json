@@ -1,5 +1,11 @@
 {
   "policies": {
+    "SkipTermsOfUse": true,
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisableFeedbackCommands": true,
+    "DisablePocket": true,
+    "DontCheckDefaultBrowser": true,
     "FirefoxHome": {
       "Search": true,
       "TopSites": false,

@@ -24,6 +24,9 @@ set -euo pipefail
 #   DEVELOPER_ID_APPLICATION  Optional Developer ID Application identity
 #   DEVELOPER_ID_INSTALLER    Optional Developer ID Installer identity
 #   NOTARYTOOL_PROFILE        Optional notarytool keychain profile for notarization
+#   BUNDLE_FIREFOX=1          Also build SensibleFox-Offline.pkg with the
+#                             Firefox DMG and uBlock XPI baked in (no network
+#                             required at install time).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -168,8 +171,6 @@ fi
 # Install Firefox if needed and write system-level policy files. This never
 # modifies Firefox.app's Contents directory.
 "\$SCRIPTS_DIR/sensiblefox" \\
-    --policied \\
-    --system \\
     --system-only \\
     --unattended \\
     --status-file "\$STATUS"
@@ -184,9 +185,9 @@ fi
 /bin/launchctl asuser "\$CONSOLE_UID" \\
     /usr/bin/sudo -u "\$CONSOLE_USER" -H \\
     "\$SCRIPTS_DIR/sensiblefox" \\
-        --app-dir /Applications \\
         --unattended \\
         --profile-only \\
+        --no-policies \\
         --status-file "\$STATUS"
 
 printf 'step=done\ntitle=SensibleFox installed\ndetail=Firefox is ready to launch.\nprogress=100\ntotal=100\n' > "\$STATUS"
@@ -267,4 +268,145 @@ if [ -z "${DEVELOPER_ID_INSTALLER:-}" ]; then
     echo "             macOS may require right-click → Open for downloaded unsigned packages."
 else
     echo "    Signed:  yes"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# All-in-one offline pkg: bundles Firefox.dmg and the uBlock Origin XPI.
+# At install time the Rust CLI reuses those bundled files if they exist at
+# /Library/Application Support/SensibleFox/bundles/.
+# ──────────────────────────────────────────────────────────────────────────
+
+if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
+    echo ""
+    echo "  → Building all-in-one offline pkg..."
+    OFFLINE_PKG_ROOT="$DIST_DIR/pkg-root-offline"
+    OFFLINE_SCRIPTS_DIR="$DIST_DIR/pkg-scripts-offline"
+    OFFLINE_RES_DIR="$DIST_DIR/pkg-resources-offline"
+    OFFLINE_COMPONENT="$DIST_DIR/component-offline.pkg"
+    OFFLINE_DIST_XML="$DIST_DIR/Distribution-offline.xml"
+    OFFLINE_PKG="$DIST_DIR/SensibleFox-Offline.pkg"
+    BUNDLE_REL="/Library/Application Support/SensibleFox/bundles"
+
+    rm -rf "$OFFLINE_PKG_ROOT" "$OFFLINE_SCRIPTS_DIR" "$OFFLINE_RES_DIR" \
+        "$OFFLINE_COMPONENT" "$OFFLINE_DIST_XML" "$OFFLINE_PKG"
+    mkdir -p "$OFFLINE_PKG_ROOT$BUNDLE_REL" "$OFFLINE_SCRIPTS_DIR" "$OFFLINE_RES_DIR"
+
+    echo "    ↓ Downloading Firefox DMG to bundle..."
+    curl -fL --retry 3 --output "$OFFLINE_PKG_ROOT$BUNDLE_REL/Firefox.dmg" "$FIREFOX_DMG_URL"
+
+    echo "    ↓ Downloading uBlock Origin XPI to bundle..."
+    curl -fL --retry 3 \
+        --output "$OFFLINE_PKG_ROOT$BUNDLE_REL/uBlock0@raymondhill.net.xpi" \
+        "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/platform:3/ublock-origin.xpi"
+
+    # Reuse the same helper app + CLI binary.
+    mkdir -p "$OFFLINE_PKG_ROOT$SUPPORT_DIR"
+    osacompile -o "$OFFLINE_PKG_ROOT$HELPER_APP_REL" "$INSTALLER_DIR/installer.applescript"
+    OFFLINE_PLIST="$OFFLINE_PKG_ROOT$HELPER_APP_REL/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName 'SensibleFox Installer'" "$OFFLINE_PLIST" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :CFBundleName string 'SensibleFox Installer'" "$OFFLINE_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.sensiblefox.installer" "$OFFLINE_PLIST" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.sensiblefox.installer" "$OFFLINE_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :NSHighResolutionCapable true" "$OFFLINE_PLIST" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$OFFLINE_PLIST"
+
+    cp "$ROOT_DIR/target/release/sensiblefox" "$OFFLINE_SCRIPTS_DIR/sensiblefox"
+    chmod 755 "$OFFLINE_SCRIPTS_DIR/sensiblefox"
+
+    OFFLINE_IDENTIFIER="${PKG_IDENTIFIER}.offline"
+
+    cat > "$OFFLINE_SCRIPTS_DIR/postinstall" <<POSTINSTALL_OFFLINE
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPTS_DIR="\$(dirname "\$0")"
+STATUS=/tmp/sensiblefox-install.status
+HELPER_APP="$HELPER_APP_REL"
+
+printf 'step=init\ntitle=SensibleFox\ndetail=Preparing offline installation...\nprogress=0\ntotal=100\n' > "\$STATUS"
+
+mark_failed() {
+    rc=\$?
+    if [ "\$rc" -ne 0 ]; then
+        printf 'step=error\ntitle=SensibleFox install failed\ndetail=The package installer exited with code %s.\nprogress=0\ntotal=100\n' "\$rc" > "\$STATUS"
+    fi
+    exit "\$rc"
+}
+trap mark_failed EXIT
+
+CONSOLE_USER="\$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+CONSOLE_UID=""
+if [ -n "\$CONSOLE_USER" ] && [ "\$CONSOLE_USER" != "root" ]; then
+    CONSOLE_UID="\$(/usr/bin/id -u "\$CONSOLE_USER" 2>/dev/null || true)"
+fi
+
+if [ -n "\$CONSOLE_UID" ]; then
+    /bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" /usr/bin/open "\$HELPER_APP" >/dev/null 2>&1 || true
+fi
+
+"\$SCRIPTS_DIR/sensiblefox" --system-only --unattended --status-file "\$STATUS"
+
+if [ -z "\$CONSOLE_USER" ] || [ -z "\$CONSOLE_UID" ]; then
+    printf 'step=error\ntitle=SensibleFox\ndetail=No logged-in user was found to configure.\nprogress=0\ntotal=100\n' > "\$STATUS"
+    exit 1
+fi
+
+/bin/launchctl asuser "\$CONSOLE_UID" \\
+    /usr/bin/sudo -u "\$CONSOLE_USER" -H \\
+    "\$SCRIPTS_DIR/sensiblefox" \\
+        --unattended --profile-only --no-policies --status-file "\$STATUS"
+
+printf 'step=done\ntitle=SensibleFox installed\ndetail=Firefox is ready to launch.\nprogress=100\ntotal=100\n' > "\$STATUS"
+
+if [ -n "\$CONSOLE_UID" ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        /usr/bin/pgrep -f "SensibleFox Installer" >/dev/null 2>&1 || break
+        /bin/sleep 0.2
+    done
+    /bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" \\
+        /usr/bin/osascript -e 'tell application id "com.sensiblefox.installer" to quit' >/dev/null 2>&1 || true
+fi
+exit 0
+POSTINSTALL_OFFLINE
+    chmod 755 "$OFFLINE_SCRIPTS_DIR/postinstall"
+
+    pkgbuild \
+        --root "$OFFLINE_PKG_ROOT" \
+        --scripts "$OFFLINE_SCRIPTS_DIR" \
+        --identifier "$OFFLINE_IDENTIFIER" \
+        --version "$PKG_VERSION" \
+        --install-location "/" \
+        "$OFFLINE_COMPONENT" \
+        > /dev/null
+
+    /usr/bin/sed \
+        -e "s/{{FF_VERSION}}/$FF_VERSION (bundled)/g" \
+        -e "s/{{FF_SIZE_MB}}/$FF_SIZE_MB/g" \
+        -e "s/{{FF_INSTALLED_MB}}/$FF_INSTALLED_MB/g" \
+        "$INSTALLER_DIR/welcome.html" > "$OFFLINE_RES_DIR/welcome.html"
+    cp "$INSTALLER_DIR/conclusion.html" "$OFFLINE_RES_DIR/conclusion.html"
+
+    /usr/bin/sed \
+        -e "s/{{PKG_IDENTIFIER}}/$OFFLINE_IDENTIFIER/g" \
+        -e "s/{{PKG_VERSION}}/$PKG_VERSION/g" \
+        "$INSTALLER_DIR/Distribution.xml" \
+        | /usr/bin/sed "s|component.pkg|$(basename "$OFFLINE_COMPONENT")|g" \
+        > "$OFFLINE_DIST_XML"
+
+    productbuild \
+        --distribution "$OFFLINE_DIST_XML" \
+        --resources "$OFFLINE_RES_DIR" \
+        --package-path "$DIST_DIR" \
+        "$OFFLINE_PKG" \
+        > /dev/null
+
+    if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
+        productsign --sign "$DEVELOPER_ID_INSTALLER" "$OFFLINE_PKG" "$OFFLINE_PKG.signed" > /dev/null
+        mv "$OFFLINE_PKG.signed" "$OFFLINE_PKG"
+    fi
+
+    rm -rf "$OFFLINE_PKG_ROOT" "$OFFLINE_SCRIPTS_DIR" "$OFFLINE_RES_DIR" \
+        "$OFFLINE_COMPONENT" "$OFFLINE_DIST_XML"
+
+    OFFLINE_SIZE=$(du -h "$OFFLINE_PKG" | cut -f1 | tr -d ' ')
+    echo "  ✓ Built dist/SensibleFox-Offline.pkg ($OFFLINE_SIZE) — bundled Firefox + uBlock Origin"
 fi

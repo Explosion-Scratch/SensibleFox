@@ -4,8 +4,10 @@ mod firefox;
 mod policy;
 mod prefs;
 mod profile;
+mod progress;
 mod upstream;
 
+use crate::progress::Progress;
 use clap::Parser;
 use console::style;
 use std::path::{Path, PathBuf};
@@ -16,66 +18,65 @@ use std::process::{Command, Stdio};
 #[command(about = "Opinionated, clean Firefox for macOS — zero config")]
 #[command(version)]
 struct Cli {
-    /// Build profile without launching Firefox
+    /// Configure the profile without launching Firefox
     #[arg(long)]
     profile_only: bool,
 
-    /// Custom profile output path
+    /// Install Firefox to ~/Applications (no admin prompt)
+    #[arg(short = 'u', long)]
+    user: bool,
+
+    /// Skip writing the macOS Firefox policy files
     #[arg(long)]
-    profile_path: Option<PathBuf>,
+    no_policies: bool,
 
-    /// Re-fetch upstream prefs from Betterfox/arkenfox
-    #[arg(long)]
-    update_upstream: bool,
-
-    /// Clean existing sensiblefox profiles
-    #[arg(long)]
-    clean: bool,
-
-    /// Install Firefox system-wide to /Applications (requires admin password prompt)
-    #[arg(short = 's', long)]
-    system: bool,
-
-    /// Custom Firefox.app install directory (e.g. ~/Applications or /Applications)
-    #[arg(long)]
-    app_dir: Option<PathBuf>,
-
-    /// Install policy-managed Firefox using macOS policy locations
-    #[arg(long)]
-    policied: bool,
-
-    /// Replace Firefox.app even when a valid copy is already installed
+    /// Reinstall Firefox even when a valid copy is already present
     #[arg(long)]
     replace_firefox: bool,
 
-    /// Install Firefox and system policy files only; skip user profile setup
+    /// Pick which SensibleFox profiles, policies, and managed storage to delete
     #[arg(long)]
+    clean: bool,
+
+    /// Re-fetch upstream prefs from Betterfox/arkenfox into generated/
+    #[arg(long)]
+    update_upstream: bool,
+
+    /// Custom Firefox.app install directory
+    #[arg(long, hide = true)]
+    app_dir: Option<PathBuf>,
+
+    /// Custom profile output path
+    #[arg(long, hide = true)]
+    profile_path: Option<PathBuf>,
+
+    /// Install Firefox + policies only; skip user profile (installer use)
+    #[arg(long, hide = true)]
     system_only: bool,
 
-    /// Do not prompt for confirmation (e.g. for installer use)
-    #[arg(long)]
+    /// Never prompt; fail fast (installer use)
+    #[arg(long, hide = true)]
     unattended: bool,
 
-    /// Write progress status to a file (for installer UI)
-    #[arg(long)]
+    /// Write progress status to a file (installer use)
+    #[arg(long, hide = true)]
     status_file: Option<PathBuf>,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    // Set up SIGINT / SIGTERM handler
     let _ = ctrlc::set_handler(|| {
         eprintln!("\n…interrupted — cleaning up");
         std::process::exit(130);
     });
 
-    if cli.status_file.is_none() {
+    if cli.status_file.is_none() && !cli.system_only {
         print_banner();
     }
 
     if cli.clean {
-        clean_profiles();
+        clean::run();
         return;
     }
 
@@ -84,176 +85,126 @@ fn main() {
         return;
     }
 
-    // Determine install target.
+    // CLI default: install Firefox to /Applications, apply policies, configure
+    // user profile — same as the PKG. Pass --user to install to ~/Applications,
+    // --no-policies to skip the macOS policy plist.
     let install_target = if let Some(ref custom) = cli.app_dir {
         firefox::InstallTarget::Custom(custom.join("Firefox.app"))
-    } else if cli.system {
-        firefox::InstallTarget::System
-    } else {
+    } else if cli.user {
         firefox::InstallTarget::User
+    } else {
+        firefox::InstallTarget::System
     };
+
+    let apply_policies =
+        !cli.no_policies && !cli.profile_only && (!cli.user || is_root());
 
     let using_default_path = cli.profile_path.is_none();
     let profile_path = cli
         .profile_path
+        .clone()
         .unwrap_or_else(profile::default_profile_path);
 
-    // Normal launches can reuse an existing profile. Installer/profile-only
-    // runs intentionally refresh it so user.js, CSS, and extensions stay current.
-    if !cli.policied && !cli.profile_only && profile_path.exists() {
+    let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
+    let steps = firefox::step_indexes();
+
+    // Fast path: reuse an existing profile, just relaunch.
+    if !cli.profile_only
+        && !cli.system_only
+        && !apply_policies
+        && profile_path.exists()
+        && cli.status_file.is_none()
+    {
         println!(
             "{} Profile already exists at {}",
             style("→").blue().bold(),
             style(profile_path.display()).cyan()
         );
-
-        let firefox_path = match firefox::detect_or_download(
-            &install_target,
-            cli.unattended,
-            cli.replace_firefox,
-            cli.status_file.as_ref(),
-        ) {
-            Ok(path) => path,
-            Err(e) => {
-                eprintln!(
-                    "  {} {}\n  Install Firefox manually and re-run, or pass --app-dir.",
-                    style("✗").red().bold(),
-                    e
-                );
-                std::process::exit(1);
-            }
-        };
-
+        progress.step(steps.detect, "Detecting Firefox");
+        let firefox_path =
+            match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
+                Ok(p) => p,
+                Err(e) => fail(&progress, "Failed to find Firefox", &e),
+            };
         if using_default_path {
             profile::register_default(&profile_path, Some(firefox_path.as_path()));
         }
-        extensions::write_ublock_managed_storage(None);
-
+        extensions::write_ublock_managed_storage();
         println!("  Launching existing profile...\n");
         launch(&firefox_path, &profile_path);
         return;
     }
 
-    step("Detecting Firefox");
-    let firefox_path = match firefox::detect_or_download(
-        &install_target,
-        cli.unattended,
-        cli.replace_firefox,
-        cli.status_file.as_ref(),
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            if cli.status_file.is_none() {
-                eprintln!(
-                    "  {} {}\n  Install Firefox manually: brew install --cask firefox",
-                    style("✗").red().bold(),
-                    e
-                );
+    let firefox_path = if cli.profile_only {
+        // Second-phase PKG invocation: Firefox is already in place. Don't
+        // rewind the progress bar — start at the profile step.
+        let bin = install_target.bin_path();
+        if bin.exists() {
+            bin
+        } else {
+            progress.step(steps.detect, "Detecting Firefox");
+            match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
+                Ok(p) => p,
+                Err(e) => fail(&progress, "Could not install Firefox", &e),
             }
-            std::process::exit(1);
+        }
+    } else {
+        progress.step(steps.detect, "Detecting Firefox");
+        match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
+            Ok(p) => p,
+            Err(e) => fail(&progress, "Could not install Firefox", &e),
         }
     };
 
-    if cli.policied {
-        step("Applying macOS Firefox policies");
-        write_status(
-            &cli.status_file,
-            "configure",
-            "Applying Firefox policies",
-            "Step 1 of 7: writing macOS policy files...",
-            15,
-        );
+    if apply_policies {
+        progress.step(steps.policies, "Writing macOS Firefox policy plist...");
         if let Err(e) = policy::apply_macos_policies() {
-            eprintln!("  {} Failed to apply policies: {}", style("✗").red(), e);
-            std::process::exit(1);
+            fail(&progress, "Failed to apply policies", &e);
         }
-
-        if cli.system {
-            step("Configuring system-wide uBlock managed storage");
-            write_status(
-                &cli.status_file,
-                "configure",
-                "Applying Firefox policies",
-                "Step 2 of 7: writing system uBlock managed storage...",
-                25,
-            );
+        if matches!(install_target, firefox::InstallTarget::System) {
+            progress.sub(0.5, "Writing system uBlock managed storage...");
             if let Err(e) = policy::apply_system_managed_storage() {
-                eprintln!("  {} {}", style("!").yellow(), e);
+                if !progress.is_quiet() {
+                    eprintln!("  {} {}", style("!").yellow(), e);
+                }
             }
         }
     }
 
     if cli.system_only {
-        write_status(
-            &cli.status_file,
-            "configure",
-            "System files installed",
-            "System files are ready. Preparing the user profile...",
-            30,
-        );
+        // PKG splits root vs user work — advance the bar so the applet shows
+        // "Preparing user profile" rather than the last completed substep
+        // while the user-side phase spins up.
+        progress.step(steps.profile, "Preparing user profile...");
         return;
     }
 
-    step("Creating profile");
-    write_status(
-        &cli.status_file,
-        "configure",
-        "Creating SensibleFox profile",
-        "Step 3 of 7: creating profile directories...",
-        35,
-    );
+    progress.step(steps.profile, "Creating profile directory");
     if let Err(e) = profile::create(&profile_path) {
-        fail_install(&cli.status_file, "Failed to create profile", &e);
+        fail(&progress, "Failed to create profile", &e);
     }
 
-    step("Writing preferences");
-    write_status(
-        &cli.status_file,
-        "configure",
-        "Applying SensibleFox preferences",
-        "Step 4 of 7: writing and verifying user.js...",
-        50,
-    );
+    progress.step(steps.prefs, "Writing user.js");
     if let Err(e) = prefs::write(&profile_path) {
-        fail_install(&cli.status_file, "Failed to write preferences", &e);
+        fail(&progress, "Failed to write preferences", &e);
     }
 
-    step("Writing userChrome CSS");
-    write_status(
-        &cli.status_file,
-        "configure",
-        "Applying SensibleFox chrome",
-        "Step 5 of 7: writing and verifying userChrome.css...",
-        65,
-    );
+    progress.step(steps.chrome, "Writing userChrome.css");
     if let Err(e) = css::write(&profile_path) {
-        fail_install(&cli.status_file, "Failed to write userChrome CSS", &e);
+        fail(&progress, "Failed to write userChrome CSS", &e);
     }
 
-    step("Installing uBlock Origin");
-    write_status(
-        &cli.status_file,
-        "configure",
-        "Installing uBlock Origin",
-        "Step 6 of 7: downloading extension and managed storage...",
-        78,
-    );
-    extensions::install_ublock(&profile_path, cli.status_file.as_ref());
+    progress.step(steps.ublock, "Installing uBlock Origin");
+    extensions::install_ublock(&profile_path, &progress);
 
     if using_default_path {
-        step("Registering default profile");
-        write_status(
-            &cli.status_file,
-            "configure",
-            "Registering Firefox profile",
-            "Step 7 of 7: updating profiles.ini...",
-            92,
-        );
+        progress.step(steps.register, "Registering default profile");
         profile::register_default(&profile_path, Some(firefox_path.as_path()));
     }
 
-    // Ensure profile is owned by user if we just created it as root.
     ensure_correct_ownership(&profile_path);
+
+    progress.finish();
 
     if cli.status_file.is_none() {
         println!(
@@ -261,14 +212,11 @@ fn main() {
             style("✓").green().bold(),
             style(profile_path.display()).cyan()
         );
-    } else {
-        finish_status(&cli.status_file);
     }
 
-    if !cli.profile_only {
-        step("Launching Firefox");
+    if !cli.profile_only && cli.status_file.is_none() {
         launch(&firefox_path, &profile_path);
-    } else if cli.status_file.is_none() {
+    } else if cli.profile_only && cli.status_file.is_none() {
         println!(
             "\n  Launch manually:\n  {} --profile {}",
             firefox_path.display(),
@@ -277,45 +225,16 @@ fn main() {
     }
 }
 
-fn finish_status(status_file: &Option<PathBuf>) {
-    if let Some(sf) = status_file {
-        firefox::write_status(
-            sf,
-            "done",
-            "SensibleFox installed",
-            "Firefox is ready to launch.",
-            100,
-            100,
-        );
-    }
-}
-
-fn fail_install(status_file: &Option<PathBuf>, title: &str, detail: &str) -> ! {
-    if let Some(sf) = status_file {
-        firefox::write_status(sf, "error", title, detail, 0, 100);
-    }
+fn fail(progress: &Progress, title: &str, detail: &str) -> ! {
+    progress.fail(title, detail);
     eprintln!("  {} {}: {}", style("✗").red().bold(), title, detail);
     std::process::exit(1);
 }
 
-fn write_status(
-    status_file: &Option<PathBuf>,
-    step: &str,
-    title: &str,
-    detail: &str,
-    progress: u64,
-) {
-    if let Some(sf) = status_file {
-        firefox::write_status(sf, step, title, detail, progress, 100);
-    }
-}
-
 fn ensure_correct_ownership(path: &Path) {
-    // Only attempt if we are running as root (e.g. from the PKG installer).
     if !is_root() {
         return;
     }
-
     if let Some(user) = get_console_user() {
         let _ = Command::new("chown")
             .args(["-R", &user, &path.to_string_lossy()])
@@ -339,7 +258,6 @@ fn is_root() -> bool {
 }
 
 fn get_console_user() -> Option<String> {
-    // Use stat -f%Su /dev/console to find the logged-in GUI user.
     Command::new("stat")
         .args(["-f%Su", "/dev/console"])
         .output()
@@ -397,34 +315,136 @@ fn print_banner() {
     println!();
 }
 
-fn step(msg: &str) {
-    println!("{} {}", style("→").blue().bold(), style(msg).bold());
-}
-
-fn clean_profiles() {
-    use dialoguer::{theme::ColorfulTheme, Confirm};
+mod clean {
+    use crate::profile;
+    use console::style;
+    use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect};
     use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
 
-    let path = profile::default_profile_path();
-    if !path.exists() {
-        println!("  {} No SensibleFox profile found", style("!").yellow());
-        return;
+    const POLICY_PLIST: &str = "/Library/Preferences/org.mozilla.firefox.plist";
+    const SYSTEM_MANAGED_STORAGE: &str =
+        "/Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json";
+    const SUPPORT_DIR: &str = "/Library/Application Support/SensibleFox";
+
+    pub fn run() {
+        let profiles = discover_profiles();
+        let user_managed = user_managed_storage_path();
+        let policy_path = Path::new(POLICY_PLIST);
+        let system_managed = Path::new(SYSTEM_MANAGED_STORAGE);
+        let support_dir = Path::new(SUPPORT_DIR);
+
+        let mut items: Vec<(String, PathBuf)> = Vec::new();
+        for p in &profiles {
+            items.push((format!("Profile: {}", p.display()), p.clone()));
+        }
+        if policy_path.exists() {
+            items.push((format!("System policy plist: {}", policy_path.display()), policy_path.into()));
+        }
+        if system_managed.exists() {
+            items.push((format!("System uBO managed storage: {}", system_managed.display()), system_managed.into()));
+        }
+        if let Some(ref p) = user_managed {
+            if p.exists() {
+                items.push((format!("User uBO managed storage: {}", p.display()), p.clone()));
+            }
+        }
+        if support_dir.exists() {
+            items.push((format!("Installer support files: {}", support_dir.display()), support_dir.into()));
+        }
+
+        if items.is_empty() {
+            println!("  {} Nothing to clean — no SensibleFox artifacts found", style("!").yellow());
+            return;
+        }
+
+        let labels: Vec<&str> = items.iter().map(|(l, _)| l.as_str()).collect();
+        let defaults: Vec<bool> = items.iter().map(|_| true).collect();
+        let picks = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select items to delete (space to toggle, enter to confirm)")
+            .items(&labels)
+            .defaults(&defaults)
+            .interact()
+            .unwrap_or_default();
+
+        if picks.is_empty() {
+            println!("  Nothing selected.");
+            return;
+        }
+
+        let confirm = Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!("Delete {} item(s)?", picks.len()))
+            .default(false)
+            .interact()
+            .unwrap_or(false);
+        if !confirm {
+            return;
+        }
+
+        for i in picks {
+            let (label, path) = &items[i];
+            let needs_root = path.starts_with("/Library");
+            match remove_path(path, needs_root) {
+                Ok(()) => println!("  {} {}", style("✓").green(), label),
+                Err(e) => println!("  {} {}: {}", style("✗").red(), label, e),
+            }
+            if profiles.contains(path) {
+                profile::unregister(path);
+            }
+        }
     }
 
-    let confirm = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(format!("Delete profile at {}?", path.display()))
-        .default(false)
-        .interact()
-        .unwrap_or(false);
-
-    if !confirm {
-        return;
+    fn remove_path(path: &Path, needs_root: bool) -> Result<(), String> {
+        if !path.exists() {
+            return Ok(());
+        }
+        if needs_root && !is_root() {
+            let target = path.to_string_lossy().replace('\'', "'\\''");
+            let script = format!("do shell script \"rm -rf '{}'\" with administrator privileges", target);
+            let status = Command::new("osascript")
+                .args(["-e", &script])
+                .status()
+                .map_err(|e| format!("osascript: {e}"))?;
+            if !status.success() {
+                return Err("admin authorisation cancelled".into());
+            }
+            return Ok(());
+        }
+        if path.is_dir() {
+            fs::remove_dir_all(path).map_err(|e| e.to_string())
+        } else {
+            fs::remove_file(path).map_err(|e| e.to_string())
+        }
     }
 
-    if let Err(e) = fs::remove_dir_all(&path) {
-        println!("  {} Failed to delete: {}", style("✗").red(), e);
-        return;
+    fn discover_profiles() -> Vec<PathBuf> {
+        let Some(root) = profile::firefox_root() else { return Vec::new() };
+        let profiles_dir = root.join("Profiles");
+        let mut out = Vec::new();
+        if let Ok(rd) = fs::read_dir(&profiles_dir) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name == "sensiblefox" || name.starts_with("sensiblefox") || name.ends_with(".sensiblefox") {
+                    out.push(p);
+                }
+            }
+        }
+        out
     }
-    profile::unregister(&path);
-    println!("  {} Profile deleted", style("✓").green());
+
+    fn user_managed_storage_path() -> Option<PathBuf> {
+        dirs::home_dir().map(|h| h.join("Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json"))
+    }
+
+    fn is_root() -> bool {
+        Command::new("id")
+            .arg("-u")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
+            .map(|uid| uid == 0)
+            .unwrap_or(false)
+    }
 }

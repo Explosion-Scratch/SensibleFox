@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-11 13:35:37
+// Generated: 2026-05-11 14:44:02
 
 
 // ═══════════════════════════════════════════
@@ -538,7 +538,6 @@
 // [3] https://www.reddit.com/r/firefox/comments/l7xetb/network_priority_for_firefoxs_enhanced_tracking/gle2mqn/?web2x&context=3
 // [SETTING] to add site exceptions: Urlbar>ETP Shield
 // [SETTING] to manage site exceptions: Options>Privacy & Security>Enhanced Tracking Protection>Manage Exceptions
-user_pref("browser.contentblocking.category", "strict"); // [HIDDEN PREF]
 //user_pref("privacy.trackingprotection.enabled", true); // enabled with "Strict"
 //user_pref("privacy.trackingprotection.pbmode.enabled", true); // DEFAULT
 //user_pref("browser.contentblocking.customBlockList.preferences.ui.enabled", false); // DEFAULT
@@ -741,7 +740,6 @@ user_pref("browser.uitour.enabled", false);
 // [6] https://brave.com/web-standards-at-brave/4-global-privacy-control/
 // [7] https://www.eff.org/gpc-privacy-badger
 // [8] https://www.eff.org/issues/do-not-track
-user_pref("privacy.globalprivacycontrol.enabled", true);
     //user_pref("privacy.globalprivacycontrol.functionality.enabled", true); // [FF120+]
 //user_pref("privacy.globalprivacycontrol.pbmode.enabled", true); // [FF120+]
 
@@ -955,7 +953,6 @@ user_pref("media.memory_cache_max_size", 65536); // 64 MB; default=8192; AF=6553
 // [1] https://kb.mozillazine.org/Browser.sessionstore.interval
 // [2] https://bugzilla.mozilla.org/show_bug.cgi?id=1304389#c64
 // [3] https://bugzilla.mozilla.org/show_bug.cgi?id=1304389#c66
-user_pref("browser.sessionstore.interval", 60000); // 1 minute; default=15000 (15s); 900000=15 min; 1800000=30 min
 
 // PREF: store extra session data when crashing or restarting to install updates
 // Dictates whether sites may save extra session data such as form content,
@@ -1116,7 +1113,6 @@ user_pref("privacy.history.custom", true);
 // [3] https://searchfox.org/mozilla-central/rev/028c68d5f32df54bca4cf96376f79e48dfafdf08/modules/libpref/init/all.js#1280-1282
 // [4] https://www.keycdn.com/blog/resource-hints#prefetch
 // [5] https://3perf.com/blog/link-rels/#prefetch
-user_pref("network.http.speculative-parallel-limit", 0);
 
 // PREF: DNS prefetching for HTMLLinkElement <link rel="dns-prefetch">
 // Used for cross-origin connections to provide small performance improvements.
@@ -1127,8 +1123,6 @@ user_pref("network.http.speculative-parallel-limit", 0);
 // [3] https://www.keycdn.com/blog/resource-hints#2-dns-prefetching
 // [4] http://www.mecs-press.org/ijieeb/ijieeb-v7-n5/IJIEEB-V7-N5-2.pdf
 // [5] https://bugzilla.mozilla.org/show_bug.cgi?id=1596935#c28
-user_pref("network.dns.disablePrefetch", true);
-    user_pref("network.dns.disablePrefetchFromHTTPS", true); // [FF127+ false]
 
 // PREF: DNS prefetch for HTMLAnchorElement (speculative DNS)
 // Disable speculative DNS calls to prevent Firefox from resolving
@@ -1149,11 +1143,9 @@ user_pref("network.dns.disablePrefetch", true);
 // [NOTE] Firefox will perform DNS lookup (if enabled) and TCP and TLS handshake,
 // but will not start sending or receiving HTTP data.
 // [1] https://www.ghacks.net/2017/07/24/disable-preloading-firefox-autocomplete-urls/
-user_pref("browser.urlbar.speculativeConnect.enabled", false);
 
 // PREF: mousedown speculative connections on bookmarks and history [FF98+]
 // Whether to warm up network connections for places:menus and places:toolbar.
-user_pref("browser.places.speculativeConnect.enabled", false);
 
 // PREF: network module preload <link rel="modulepreload"> [FF115+]
 // High-priority loading of current page JavaScript modules.
@@ -1183,7 +1175,6 @@ user_pref("browser.places.speculativeConnect.enabled", false);
 // [3] https://timkadlec.com/remembers/2020-06-17-prefetching-at-this-age/
 // [4] https://3perf.com/blog/link-rels/#prefetch
 // [5] https://developer.mozilla.org/docs/Web/HTTP/Link_prefetching_FAQ
-user_pref("network.prefetch-next", false);
 
 // PREF: Fetch Priority API [FF119+]
 // Indicates whether the `fetchpriority` attribute for elements which support it.
@@ -1241,7 +1232,6 @@ user_pref("browser.urlbar.untrimOnUserInteraction.featureGate", true);
 
 // PREF: enable seperate search engine for Private Windows
 // [SETTINGS] Preferences>Search>Default Search Engine>"Use this search engine in Private Windows"
-user_pref("browser.search.separatePrivateDefault.ui.enabled", true);
 // [SETTINGS] "Choose a different default search engine for Private Windows only"
     //user_pref("browser.search.separatePrivateDefault", true); // DEFAULT
 
@@ -1259,7 +1249,6 @@ user_pref("browser.search.separatePrivateDefault.ui.enabled", true);
 // Override these if you trust and use a privacy respecting search engine.
 // [NOTE] Both prefs must be true for live search to work in the location bar.
 // [SETTING] Search>Provide search suggestions > Show search suggestions in address bar result
-user_pref("browser.search.suggest.enabled", false);
     //user_pref("browser.search.suggest.enabled.private", false); // DEFAULT
 
 // PREF: disable Show recent searches
@@ -1268,7 +1257,6 @@ user_pref("browser.search.suggest.enabled", false);
 
 // PREF: disable Firefox Suggest
 // [1] https://github.com/arkenfox/user.js/issues/1257
-user_pref("browser.urlbar.quicksuggest.enabled", false); // controls whether the UI is shown
     //user_pref("browser.urlbar.suggest.quicksuggest.sponsored", false); // [FF92+] 
     //user_pref("browser.urlbar.suggest.quicksuggest.nonsponsored", false); // [FF95+]
 // hide Firefox Suggest label in URL dropdown box
@@ -1280,7 +1268,6 @@ user_pref("browser.urlbar.groupLabels.enabled", false);
 // [SETTING] Privacy & Security>History>Custom Settings>Remember search and form history
 // [1] https://blog.mindedsecurity.com/2011/10/autocompleteagain.html
 // [2] https://bugzilla.mozilla.org/381681
-user_pref("browser.formfill.enable", false);
 
 // PREF: URL bar domain guessing
 // Domain guessing intercepts DNS "hostname not found errors" and resends a
@@ -1532,7 +1519,6 @@ user_pref("dom.security.https_only_mode_error_page_user_suggestions", true);
 
 // PREF: disable formless login capture for Password Manager [FF51+]
 // [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1166947
-user_pref("signon.formlessCapture.enabled", false);
 
 // PREF: disable capturing credentials in private browsing
 user_pref("signon.privateBrowsingCapture.enabled", false);
@@ -1571,7 +1557,6 @@ user_pref("signon.privateBrowsingCapture.enabled", false);
 // 1=don't allow cross-origin sub-resources to open HTTP authentication credentials dialogs
 // 2=allow sub-resources to open HTTP authentication credentials dialogs (default)
 // [1] https://web.archive.org/web/20181123134351/https://www.fxsitecompat.com/en-CA/docs/2015/http-auth-dialog-can-no-longer-be-triggered-by-cross-origin-resources/
-user_pref("network.auth.subresource-http-auth-allow", 1);
 
 // PREF: prevent password truncation when submitting form data
 // [1] https://www.ghacks.net/2020/05/18/firefox-77-wont-truncate-text-exceeding-max-length-to-address-password-pasting-issues/
@@ -1691,7 +1676,6 @@ user_pref("extensions.enabledScopes", 5); // [HIDDEN PREF]
 // [1] https://blog.mozilla.org/security/2021/03/22/firefox-87-trims-http-referrers-by-default-to-protect-user-privacy/
 // [2] https://web.dev/referrer-best-practices/
 // [3] https://www.reddit.com/r/waterfox/comments/16px8yq/comment/k29r6bu/?context=3
-user_pref("network.http.referer.XOriginTrimmingPolicy", 2);
 
 /******************************************************************************
  * SECTION: CONTAINERS                                                       *
@@ -2045,11 +2029,9 @@ user_pref("extensions.getAddons.cache.enabled", false);
 // PREF: disable new data submission [FF41+]
 // If disabled, no policy is shown or upload takes place, ever.
 // [1] https://bugzilla.mozilla.org/1195552
-user_pref("datareporting.policy.dataSubmissionEnabled", false);
 
 // PREF: disable Health Reports
 // [SETTING] Privacy & Security>Firefox Data Collection & Use>Allow Firefox to send technical data.
-user_pref("datareporting.healthreport.uploadEnabled", false);
 
 // PREF: disable telemetry
 // - If "unified" is false then "enabled" controls the telemetry module
@@ -2057,27 +2039,13 @@ user_pref("datareporting.healthreport.uploadEnabled", false);
 // [NOTE] "toolkit.telemetry.enabled" is now LOCKED to reflect prerelease (true) or release builds (false) [2]
 // [1] https://firefox-source-docs.mozilla.org/toolkit/components/telemetry/telemetry/internals/preferences.html
 // [2] https://medium.com/georg-fritzsche/data-preference-changes-in-firefox-58-2d5df9c428b5
-user_pref("toolkit.telemetry.unified", false);
-user_pref("toolkit.telemetry.enabled", false); // see [NOTE]
-user_pref("toolkit.telemetry.server", "data:,");
-user_pref("toolkit.telemetry.archive.enabled", false);
-user_pref("toolkit.telemetry.newProfilePing.enabled", false);
-user_pref("toolkit.telemetry.shutdownPingSender.enabled", false);
-user_pref("toolkit.telemetry.updatePing.enabled", false);
-user_pref("toolkit.telemetry.bhrPing.enabled", false); // [FF57+] Background Hang Reporter
-user_pref("toolkit.telemetry.firstShutdownPing.enabled", false);
 //user_pref("toolkit.telemetry.dap_enabled", false); // DEFAULT [FF108]
 
 // PREF: disable Telemetry Coverage
 // [1] https://blog.mozilla.org/data/2018/08/20/effectively-measuring-search-in-firefox/
 // [2] https://github.com/yokoffing/Betterfox/issues/443
-user_pref("toolkit.telemetry.coverage.opt-out", true); // [HIDDEN PREF]
-user_pref("toolkit.coverage.opt-out", true); // [FF64+] [HIDDEN PREF]
-user_pref("toolkit.coverage.endpoint.base", "");
 
 // PREF: disable Firefox Home (Activity Stream) telemetry 
-user_pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
-user_pref("browser.newtabpage.activity-stream.telemetry", false);
 
 // PREF: disable daily active users [FF136+]
 user_pref("datareporting.usage.uploadEnabled", false);
@@ -2088,21 +2056,16 @@ user_pref("datareporting.usage.uploadEnabled", false);
 
 // PREF: disable Studies
 // [SETTING] Privacy & Security>Firefox Data Collection & Use>Allow Firefox to install and run studies
-user_pref("app.shield.optoutstudies.enabled", false);
 
 // PREF: disable Normandy/Shield [FF60+]
 // Shield is an telemetry system (including Heartbeat) that can also push and test "recipes".
 // [1] https://mozilla.github.io/normandy/
-user_pref("app.normandy.enabled", false);
-user_pref("app.normandy.api_url", "");
 
 /******************************************************************************
  * SECTION: CRASH REPORTS                                                    *
 ******************************************************************************/
 
 // PREF: disable crash reports
-user_pref("breakpad.reportURL", "");
-user_pref("browser.tabs.crashReporting.sendReport", false);
     //user_pref("browser.crashReports.unsubmittedCheck.enabled", false); // DEFAULT
 
 // PREF: enforce no submission of backlogged crash reports
@@ -2179,37 +2142,27 @@ user_pref("browser.tabs.crashReporting.sendReport", false);
 ****************************************************************************/
 
 // PREF: disable about:addons' Recommendations pane (uses Google Analytics)
-user_pref("extensions.getAddons.showPane", false); // HIDDEN
 
 // PREF: disable recommendations in about:addons' Extensions and Themes panes
-user_pref("extensions.htmlaboutaddons.recommendations.enabled", false);
 
 // PREF: Personalized Extension Recommendations in about:addons and AMO
 // [NOTE] This pref has no effect when Health Reports are disabled.
 // [SETTING] Privacy & Security>Firefox Data Collection & Use>Allow Firefox to make personalized extension recommendations
-user_pref("browser.discovery.enabled", false);
 
 // PREF: disable Firefox from asking to set as the default browser
 // [1] https://github.com/yokoffing/Betterfox/issues/166
-user_pref("browser.shell.checkDefaultBrowser", false);
 
 // PREF: disable Extension Recommendations (CFR: "Contextual Feature Recommender")
 // [1] https://support.mozilla.org/en-US/kb/extension-recommendations
-user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons", false);
-user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false);
 
 // PREF: hide "More from Mozilla" in Settings
-user_pref("browser.preferences.moreFromMozilla", false);
 
 // PREF: tab and about:config warnings
 //user_pref("browser.tabs.warnOnClose", false); // DEFAULT [FF94+]
 //user_pref("browser.tabs.warnOnCloseOtherTabs", true); // DEFAULT
 //user_pref("browser.tabs.warnOnOpen", true); // DEFAULT
-user_pref("browser.aboutConfig.showWarning", false);
 
 // PREF: disable welcome notices
-user_pref("browser.startup.homepage_override.mstone", "ignore");
-user_pref("browser.aboutwelcome.enabled", false); // disable Intro screens
     //user_pref("startup.homepage_welcome_url", "");
     //user_pref("startup.homepage_welcome_url.additional", "");
     //user_pref("startup.homepage_override_url", ""); // What's New page after updates
@@ -2232,10 +2185,8 @@ user_pref("browser.profiles.enabled", true);
 ****************************************************************************/
 
 // PREF: enable Firefox to use userChome, userContent, etc.
-user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 
 // PREF: add compact mode back to options
-user_pref("browser.compactmode.show", true);
 
 // PREF: preferred color scheme for websites
 // [SETTING] General>Language and Appearance>Website appearance
@@ -2244,13 +2195,11 @@ user_pref("browser.compactmode.show", true);
 // Before FF95, the pref was 2, which determined site color based on OS theme.
 // Dark (0), Light (1), System (2), Browser (3) [DEFAULT FF95+]
 // [1] https://www.reddit.com/r/firefox/comments/rfj6yc/how_to_stop_firefoxs_dark_theme_from_overriding/hoe82i5/?context=3
-user_pref("layout.css.prefers-color-scheme.content-override", 2);
 
 // PREF: disable always using dark theme for private browsing windows [FF106+]
 //user_pref("browser.theme.dark-private-windows", false);
 
 // PREF: prevent private windows being separate from normal windows in taskbar [WINDOWS] [FF106+]
-user_pref("browser.privateWindowSeparation.enabled", false);
 
 // PREF: show search bar [FF122+]
 // Mozilla has removed the search bar option from the settings window.
@@ -2280,12 +2229,10 @@ user_pref("browser.tabs.groups.smart.enabled", false);
 
 // PREF: Key points in link previews
 //user_pref("browser.ai.control.linkPreviewKeyPoints", "blocked");
-user_pref("browser.ml.linkPreview.enabled", false);
 
 // PREF: Chatbot in sidebar
 //user_pref("browser.ai.control.sidebarChatbot", "blocked");
 user_pref("browser.ml.chat.enabled", false);
-user_pref("browser.ml.chat.menu", false);
 
 /****************************************************************************
  * SECTION: TRANSLATIONS                                                    *
@@ -2306,8 +2253,6 @@ user_pref("browser.ml.chat.menu", false);
 ****************************************************************************/
 
 // PREF: remove fullscreen delay
-user_pref("full-screen-api.transition-duration.enter", "0 0"); // default=200 200
-user_pref("full-screen-api.transition-duration.leave", "0 0"); // default=200 200
 
 // PREF: disable fullscreen notice
 // [NOTE] Adjust to a sensible value, like 1250, if you have security concerns.
@@ -2347,7 +2292,6 @@ user_pref("full-screen-api.transition-duration.leave", "0 0"); // default=200 20
 //user_pref("browser.urlbar.suggest.bookmark", true); // DEFAULT
 //user_pref("browser.urlbar.suggest.clipboard", false);
 //user_pref("browser.urlbar.suggest.openpage", false);
-user_pref("browser.urlbar.suggest.engines", false);
     //user_pref("browser.urlbar.suggest.searches", false);
 //user_pref("browser.urlbar.quickactions.enabled", false);
 //user_pref("browser.urlbar.suggest.weather", true); // DEFAULT [FF108]
@@ -2360,7 +2304,6 @@ user_pref("browser.urlbar.suggest.engines", false);
 
 // PREF: disable urlbar trending search suggestions [FF118+]
 // [SETTING] Search>Search Suggestions>Show trending search suggestions (FF119)
-user_pref("browser.urlbar.trending.featureGate", false);
 //user_pref("browser.urlbar.suggest.trending", false);
 
 // PREF: disable urlbar suggestions
@@ -2451,11 +2394,8 @@ user_pref("browser.urlbar.trending.featureGate", false);
 //user_pref("browser.newtabpage.activity-stream.discoverystream.enabled", false);
 //user_pref("browser.newtabpage.activity-stream.showSearch", true); // NTP Web Search [DEFAULT]
 //user_pref("browser.newtabpage.activity-stream.feeds.topsites", false); // Shortcuts
-      user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false); // Sponsored shortcuts [FF83+]
 //user_pref("browser.newtabpage.activity-stream.showWeather", false); // Weather [FF130+]
     //user_pref("browser.newtabpage.activity-stream.system.showWeather", false); // hides Weather as an UI option
-user_pref("browser.newtabpage.activity-stream.feeds.section.topstories", false); // Recommended by Pocket
-user_pref("browser.newtabpage.activity-stream.showSponsored", false); // Sponsored stories [FF58+]  
 user_pref("browser.newtabpage.activity-stream.showSponsoredCheckboxes", false); // [FF140+] Support Firefox
 //user_pref("browser.newtabpage.activity-stream.feeds.section.highlights", false); // Recent Activity [DEFAULT]
       //user_pref("browser.newtabpage.activity-stream.section.highlights.includeBookmarks", false);
@@ -2468,7 +2408,6 @@ user_pref("browser.newtabpage.activity-stream.showSponsoredCheckboxes", false); 
 
 // PREF: clear default topsites
 // [NOTE] This does not block you from adding your own.
-user_pref("browser.newtabpage.activity-stream.default.sites", "");
 
 // PREF: keep search in the search box; prevent from jumping to address bar
 // [1] https://www.reddit.com/r/firefox/comments/oxwvbo/firefox_start_page_search_options/
@@ -2528,7 +2467,6 @@ user_pref("browser.newtabpage.activity-stream.default.sites", "");
 //user_pref("browser.download.alwaysOpenPanel", false);
 
 // PREF: disable adding downloads to the system's "recent documents" list 
-user_pref("browser.download.manager.addToRecentDocs", false);
 
 /****************************************************************************
  * SECTION: PDF                                                             *
@@ -2545,7 +2483,6 @@ user_pref("browser.download.manager.addToRecentDocs", false);
 //user_pref("browser.helperApps.showOpenOptionForPdfJS", true); // DEFAULT
 
 // PREF: open PDFs inline (FF103+)
-user_pref("browser.download.open_pdf_attachments_inline", true);
 
 // PREF: PDF sidebar on load
 // 2=table of contents (if not available, will default to 1)
@@ -2625,13 +2562,10 @@ user_pref("browser.download.open_pdf_attachments_inline", true);
     //user_pref("browser.tabs.loadBookmarksInBackground", true); // load bookmarks in background
 
 // PREF: leave Bookmarks Menu open when selecting a site
-user_pref("browser.bookmarks.openInTabClosesMenu", false);
 
 // PREF: restore "View image info" on right-click
-user_pref("browser.menu.showViewImageInfo", true);
 
 // PREF: show all matches in Findbar
-user_pref("findbar.highlightAll", true);
 
 // PREF: force disable finding text on page without prompting
 // [NOTE] Not as powerful as using Ctrl+F.
@@ -2662,7 +2596,6 @@ user_pref("findbar.highlightAll", true);
 //user_pref("browser.meta_refresh_when_inactive.disabled", true);
 
 // PREF: do not select the space next to a word when selecting a word
-user_pref("layout.word_select.eat_space_to_next_word", false);
 
 // PREF: controls if a double-click word selection also deletes one adjacent whitespace
 // This mimics native behavior on macOS.
@@ -2899,7 +2832,6 @@ user_pref("browser.messaging-system.whatsNewPanel.enabled", false);
 // ═══════════════════════════════════════════
 // WELCOME & FIRST-RUN — skip everything
 // ═══════════════════════════════════════════
-user_pref("browser.aboutConfig.showWarning", false);
 user_pref("browser.aboutwelcome.enabled", false);
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -2973,7 +2905,6 @@ user_pref("nglayout.initialpaint.delay_in_oopif", 0);
 user_pref("content.notify.interval", 100000);
 user_pref("browser.cache.jsbc_compression_level", 3);
 user_pref("browser.cache.disk.metadata_memory_limit", 16384);
-user_pref("browser.cache.memory.capacity", 131072);
 user_pref("browser.cache.memory.max_entry_size", 20480);
 user_pref("media.memory_caches_combined_limit_kb", 1048576);
 user_pref("media.cache_readahead_limit", 600);
@@ -2992,6 +2923,60 @@ user_pref("network.dnsCacheExpirationGracePeriod", 120);
 user_pref("network.ssl_tokens_cache_capacity", 10240);
 user_pref("browser.tabs.min_inactive_duration_before_unload", 300000);
 user_pref("dom.ipc.processPrelaunch.fission.number", 1);
+
+// ═══════════════════════════════════════════
+// SPEED POLICY — tunable goals (override locally if you want a different tradeoff)
+// ═══════════════════════════════════════════
+// Keep history forever:
+//   • places.history.expiration.max_pages → high cap (below); alternatively lower for less SQLite work
+// Prefer RAM over disk:
+//   • Large browser.cache.memory.capacity; keep disk cache on for revisits, or set
+//     browser.cache.disk.enable false to minimize disk (hurts cold/offline repeat loads)
+// Prefer higher performance over lower RAM:
+//   • Raise memory/disk caches, browser.sessionhistory.max_total_viewers, dom.ipc.processCount*
+//   • Lower those toward defaults if you need to shrink footprint
+// Accessibility overhead off (breaks a11y features):
+//   • accessibility.force_disabled → 1
+// Reader: skip readability scan on every pageload:
+//   • reader.parse-on-load.enabled → false (reader icon/heuristics less aggressive)
+// Higher parallelism (more isolated web processes → more RAM):
+//   • dom.ipc.processCount / dom.ipc.processCount.webIsolated (below)
+// Session snapshots less often (less disk IO; rougher crash recovery window):
+//   • browser.sessionstore.interval (ms; below uses 60s — default often 15s)
+// GPU path where available:
+//   • gfx.canvas.accelerated + existing WebRender/GPU prefs above
+// Speculative networking (more background DNS/connects; snappier perceived loads):
+//   • network.predictor*, prefetch-next, dns prefetch on, urlbar speculative connect
+//
+user_pref("places.history.expiration.max_pages", 2147483647);
+user_pref("browser.cache.memory.capacity", 262144);
+user_pref("browser.cache.disk.smart_size.enabled", false);
+user_pref("browser.cache.disk.capacity", 1048576);
+user_pref("browser.sessionhistory.max_total_viewers", 16);
+user_pref("dom.ipc.processCount", 8);
+user_pref("dom.ipc.processCount.webIsolated", 8);
+user_pref("browser.sessionstore.interval", 60000);
+user_pref("accessibility.force_disabled", 1);
+user_pref("reader.parse-on-load.enabled", false);
+user_pref("gfx.canvas.accelerated", true);
+user_pref("network.predictor.enabled", true);
+user_pref("network.predictor.enable-prefetch", true);
+user_pref("network.predictor.enable-hover-on-ssl", true);
+user_pref("network.prefetch-next", true);
+user_pref("network.dns.disablePrefetch", false);
+user_pref("network.dns.disablePrefetchFromHTTPS", false);
+user_pref("network.preconnect", true);
+user_pref("network.http.speculative-parallel-limit", 10);
+user_pref("browser.urlbar.speculativeConnect.enabled", true);
+user_pref("browser.places.speculativeConnect.enabled", true);
+user_pref("network.early-hints.enabled", true);
+user_pref("network.early-hints.preconnect.enabled", true);
+user_pref("network.http.priority_header.enabled", true);
+user_pref("network.http.http2.send-priority-frames", true);
+user_pref("network.http.http3.enable", true);
+user_pref("network.http.http3.support_version1", true);
+user_pref("browser.startup.preXulSkeletonUI", true);
+user_pref("browser.privatebrowsing.resetPBM.showConfirmationDialog", false);
 
 // ═══════════════════════════════════════════
 // PRIVACY — strict tracking protection

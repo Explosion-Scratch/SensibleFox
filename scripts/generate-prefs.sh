@@ -245,7 +245,6 @@ user_pref("nglayout.initialpaint.delay_in_oopif", 0);
 user_pref("content.notify.interval", 100000);
 user_pref("browser.cache.jsbc_compression_level", 3);
 user_pref("browser.cache.disk.metadata_memory_limit", 16384);
-user_pref("browser.cache.memory.capacity", 131072);
 user_pref("browser.cache.memory.max_entry_size", 20480);
 user_pref("media.memory_caches_combined_limit_kb", 1048576);
 user_pref("media.cache_readahead_limit", 600);
@@ -264,6 +263,60 @@ user_pref("network.dnsCacheExpirationGracePeriod", 120);
 user_pref("network.ssl_tokens_cache_capacity", 10240);
 user_pref("browser.tabs.min_inactive_duration_before_unload", 300000);
 user_pref("dom.ipc.processPrelaunch.fission.number", 1);
+
+// ═══════════════════════════════════════════
+// SPEED POLICY — tunable goals (override locally if you want a different tradeoff)
+// ═══════════════════════════════════════════
+// Keep history forever:
+//   • places.history.expiration.max_pages → high cap (below); alternatively lower for less SQLite work
+// Prefer RAM over disk:
+//   • Large browser.cache.memory.capacity; keep disk cache on for revisits, or set
+//     browser.cache.disk.enable false to minimize disk (hurts cold/offline repeat loads)
+// Prefer higher performance over lower RAM:
+//   • Raise memory/disk caches, browser.sessionhistory.max_total_viewers, dom.ipc.processCount*
+//   • Lower those toward defaults if you need to shrink footprint
+// Accessibility overhead off (breaks a11y features):
+//   • accessibility.force_disabled → 1
+// Reader: skip readability scan on every pageload:
+//   • reader.parse-on-load.enabled → false (reader icon/heuristics less aggressive)
+// Higher parallelism (more isolated web processes → more RAM):
+//   • dom.ipc.processCount / dom.ipc.processCount.webIsolated (below)
+// Session snapshots less often (less disk IO; rougher crash recovery window):
+//   • browser.sessionstore.interval (ms; below uses 60s — default often 15s)
+// GPU path where available:
+//   • gfx.canvas.accelerated + existing WebRender/GPU prefs above
+// Speculative networking (more background DNS/connects; snappier perceived loads):
+//   • network.predictor*, prefetch-next, dns prefetch on, urlbar speculative connect
+//
+user_pref("places.history.expiration.max_pages", 2147483647);
+user_pref("browser.cache.memory.capacity", 262144);
+user_pref("browser.cache.disk.smart_size.enabled", false);
+user_pref("browser.cache.disk.capacity", 1048576);
+user_pref("browser.sessionhistory.max_total_viewers", 16);
+user_pref("dom.ipc.processCount", 8);
+user_pref("dom.ipc.processCount.webIsolated", 8);
+user_pref("browser.sessionstore.interval", 60000);
+user_pref("accessibility.force_disabled", 1);
+user_pref("reader.parse-on-load.enabled", false);
+user_pref("gfx.canvas.accelerated", true);
+user_pref("network.predictor.enabled", true);
+user_pref("network.predictor.enable-prefetch", true);
+user_pref("network.predictor.enable-hover-on-ssl", true);
+user_pref("network.prefetch-next", true);
+user_pref("network.dns.disablePrefetch", false);
+user_pref("network.dns.disablePrefetchFromHTTPS", false);
+user_pref("network.preconnect", true);
+user_pref("network.http.speculative-parallel-limit", 10);
+user_pref("browser.urlbar.speculativeConnect.enabled", true);
+user_pref("browser.places.speculativeConnect.enabled", true);
+user_pref("network.early-hints.enabled", true);
+user_pref("network.early-hints.preconnect.enabled", true);
+user_pref("network.http.priority_header.enabled", true);
+user_pref("network.http.http2.send-priority-frames", true);
+user_pref("network.http.http3.enable", true);
+user_pref("network.http.http3.support_version1", true);
+user_pref("browser.startup.preXulSkeletonUI", true);
+user_pref("browser.privatebrowsing.resetPBM.showConfirmationDialog", false);
 
 // ═══════════════════════════════════════════
 // PRIVACY — strict tracking protection
@@ -452,6 +505,28 @@ user_pref("browser.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("svg.context-properties.content.enabled", true);
 user_pref("browser.uiCustomization.state", "{\"placements\":{\"widget-overflow-fixed-list\":[],\"unified-extensions-area\":[],\"nav-bar\":[\"back-button\",\"forward-button\",\"stop-reload-button\",\"customizableui-special-spring1\",\"urlbar-container\",\"customizableui-special-spring2\",\"downloads-button\",\"unified-extensions-button\",\"ublock0_raymondhill_net-browser-action\"],\"TabsToolbar\":[\"tabbrowser-tabs\",\"new-tab-button\",\"alltabs-button\"],\"PersonalToolbar\":[\"personal-bookmarks\"]},\"seen\":[\"save-to-pocket-button\",\"developer-button\",\"ublock0_raymondhill_net-browser-action\"],\"dirtyAreaCache\":[\"nav-bar\",\"PersonalToolbar\",\"TabsToolbar\"],\"currentVersion\":20,\"newElementCount\":2}");
 SENSIBLEFOX
+
+echo ""
+echo "  Deduplicating user_pref keys (keeping last write per key)..."
+pre_count=$(grep -c '^[[:space:]]*user_pref(' "$OUT_DIR/user.js" || true)
+/usr/bin/perl -e '
+  my @lines = <>;
+  my %last;
+  for my $i (0..$#lines) {
+    if ($lines[$i] =~ /^\s*user_pref\(\s*"([^"]+)"/) {
+      $last{$1} = $i;
+    }
+  }
+  for my $i (0..$#lines) {
+    if ($lines[$i] =~ /^\s*user_pref\(\s*"([^"]+)"/) {
+      print $lines[$i] if $last{$1} == $i;
+    } else {
+      print $lines[$i];
+    }
+  }
+' "$OUT_DIR/user.js" > "$OUT_DIR/user.js.dedup" && mv "$OUT_DIR/user.js.dedup" "$OUT_DIR/user.js"
+post_count=$(grep -c '^[[:space:]]*user_pref(' "$OUT_DIR/user.js" || true)
+echo "    Removed $((pre_count - post_count)) duplicate user_pref lines"
 
 lines=$(wc -l < "$OUT_DIR/user.js" | tr -d ' ')
 prefs=$(grep -c 'user_pref(' "$OUT_DIR/user.js" || true)

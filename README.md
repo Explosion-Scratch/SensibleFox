@@ -47,14 +47,24 @@ NOTARYTOOL_PROFILE="your-notarytool-profile" \
 ./scripts/build-pkg.sh
 ```
 
+Set `BUNDLE_FIREFOX=1` to additionally produce `dist/SensibleFox-Offline.pkg`, a ~150 MB all-in-one package that bundles the Firefox DMG and the uBlock Origin XPI so the installer needs no network access.
+
+```sh
+BUNDLE_FIREFOX=1 ./scripts/build-pkg.sh
+```
+
 ## CLI options
 
-| Flag                   | Description                                 |
-| ---------------------- | ------------------------------------------- |
-| `--profile-only`       | Build the profile without launching Firefox |
-| `--profile-path <dir>` | Custom output path for the profile          |
-| `--update-upstream`    | Re-fetch Betterfox/arkenfox prefs           |
-| `--clean`              | Pick which profiles to delete               |
-| `--policied`           | Install macOS Firefox policy files          |
-| `--system`             | Install/use `/Applications/Firefox.app`     |
-| `--replace-firefox`    | Reinstall Firefox even if it looks valid    |
+Running `sensiblefox` with no flags performs the exact same install the PKG does: download/verify Firefox into `/Applications`, write macOS policies, create the SensibleFox profile, install uBlock Origin, and launch Firefox.
+
+| Flag                | Description                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `-u`, `--user`      | Install Firefox to `~/Applications` (no admin prompt)                                  |
+| `--no-policies`     | Skip the macOS Firefox policy plist                                                    |
+| `--profile-only`    | Configure the profile without launching Firefox                                        |
+| `--replace-firefox` | Reinstall Firefox even when a valid copy is already present                            |
+| `--update-upstream` | Re-fetch Betterfox/arkenfox prefs into `generated/`                                    |
+| `--clean`           | Interactively pick which SensibleFox profiles, policies, and managed storage to delete |
+
+
+**Important**: By using this project you agree that you take legal responsibility for any actions that SensibleFox performs on your behalf during the installation process, including but not limited to disabling warnings, other legal notices, or enabling adblocking.
