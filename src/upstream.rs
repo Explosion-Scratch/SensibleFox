@@ -16,10 +16,6 @@ const BETTERFOX_URLS: &[(&str, &str)] = &[
         "Securefox",
         "https://raw.githubusercontent.com/yokoffing/Betterfox/main/Securefox.js",
     ),
-    (
-        "Smoothfox",
-        "https://raw.githubusercontent.com/yokoffing/Betterfox/main/Smoothfox.js",
-    ),
 ];
 
 const ARKENFOX_URL: &str = "https://raw.githubusercontent.com/arkenfox/user.js/master/user.js";
@@ -126,7 +122,6 @@ fn merge_upstream(dir: &Path) {
         "betterfox-fastfox.js",
         "betterfox-peskyfox.js",
         "betterfox-securefox.js",
-        "betterfox-smoothfox.js",
     ];
 
     for name in &files {
