@@ -96,27 +96,88 @@ fn main() {
         firefox::InstallTarget::System
     };
 
-    let apply_policies =
-        !cli.no_policies && !cli.profile_only && (!cli.user || is_root());
+    if !is_root() && matches!(install_target, firefox::InstallTarget::System) && !cli.profile_only {
+        println!("  {} Elevating to root for system-wide installation...", style("ℹ").cyan());
+        let current_exe = std::env::current_exe().expect("Failed to get current executable path");
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let status = std::process::Command::new("sudo")
+            .arg(current_exe)
+            .args(args)
+            .status()
+            .expect("Failed to execute sudo");
+        std::process::exit(status.code().unwrap_or(1));
+    }
+
+    let apply_policies = !cli.no_policies && !cli.profile_only && (!cli.user || is_root());
 
     let using_default_path = cli.profile_path.is_none();
     let profile_path = cli
         .profile_path
         .clone()
         .unwrap_or_else(profile::default_profile_path);
+    let mut final_profile_path = profile_path.clone();
+    let mut just_launch = false;
+
+    if cli.profile_path.is_none() && !cli.system_only {
+        let existing = profile::discover_profiles();
+        if !existing.is_empty() {
+            if cli.unattended {
+                // Non-interactive: create a new profile if the default one exists
+                if profile_path.exists() {
+                    let mut i = 1;
+                    loop {
+                        let p = profile_path.with_file_name(format!("sensiblefox-{}", i));
+                        if !p.exists() {
+                            final_profile_path = p;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+            } else if cli.status_file.is_none() {
+                // Interactive: prompt
+                use dialoguer::{theme::ColorfulTheme, Select};
+                let mut items = vec!["Launch existing profile".to_string(), "Create new profile".to_string()];
+                for p in &existing {
+                    items.push(format!("Update profile: {}", p.file_name().unwrap_or_default().to_string_lossy()));
+                }
+
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("SensibleFox profile(s) already exist. What would you like to do?")
+                    .default(0)
+                    .items(&items)
+                    .interact()
+                    .unwrap_or(0);
+
+                if selection == 0 {
+                    final_profile_path = existing[0].clone();
+                    just_launch = true;
+                } else if selection == 1 {
+                    let mut i = 1;
+                    loop {
+                        let p = profile_path.with_file_name(format!("sensiblefox-{}", i));
+                        if !p.exists() {
+                            final_profile_path = p;
+                            break;
+                        }
+                        i += 1;
+                    }
+                } else {
+                    final_profile_path = existing[selection - 2].clone();
+                }
+            }
+        }
+    }
+
+    let profile_path = final_profile_path;
 
     let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
     let steps = firefox::step_indexes();
 
     // Fast path: reuse an existing profile, just relaunch.
-    if !cli.profile_only
-        && !cli.system_only
-        && !apply_policies
-        && profile_path.exists()
-        && cli.status_file.is_none()
-    {
+    if just_launch {
         println!(
-            "{} Profile already exists at {}",
+            "{} Launching existing profile at {}",
             style("→").blue().bold(),
             style(profile_path.display()).cyan()
         );
@@ -126,10 +187,6 @@ fn main() {
                 Ok(p) => p,
                 Err(e) => fail(&progress, "Failed to find Firefox", &e),
             };
-        if using_default_path {
-            profile::register_default(&profile_path, Some(firefox_path.as_path()));
-        }
-        extensions::write_ublock_managed_storage();
         println!("  Launching existing profile...\n");
         launch(&firefox_path, &profile_path);
         return;
@@ -242,7 +299,7 @@ fn ensure_correct_ownership(path: &Path) {
     }
 }
 
-fn is_root() -> bool {
+pub fn is_root() -> bool {
     Command::new("id")
         .arg("-u")
         .output()
@@ -273,7 +330,22 @@ fn get_console_user() -> Option<String> {
 }
 
 fn launch(firefox_path: &PathBuf, profile_path: &PathBuf) {
-    match Command::new(firefox_path)
+    let mut app_path = firefox_path.clone();
+    if app_path.ends_with("firefox") {
+        app_path.pop();
+    }
+    if app_path.ends_with("MacOS") {
+        app_path.pop();
+    }
+    if app_path.ends_with("Contents") {
+        app_path.pop();
+    }
+
+    match Command::new("open")
+        .arg("-n")
+        .arg("-a")
+        .arg(&app_path)
+        .arg("--args")
         .arg("--profile")
         .arg(profile_path)
         .stdout(Stdio::null())
@@ -288,10 +360,10 @@ fn launch(firefox_path: &PathBuf, profile_path: &PathBuf) {
         }
         Err(e) => {
             eprintln!(
-                "  {} Failed to launch Firefox: {}\n  Path: {}\n  Profile: {}",
+                "  {} Failed to launch Firefox: {}\n  App: {}\n  Profile: {}",
                 style("✗").red().bold(),
                 e,
-                firefox_path.display(),
+                app_path.display(),
                 profile_path.display()
             );
             std::process::exit(1);
@@ -323,32 +395,45 @@ mod clean {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    const POLICY_PLIST: &str = "/Library/Preferences/org.mozilla.firefox.plist";
+    const SYSTEM_POLICY_PLIST: &str = "/Library/Preferences/org.mozilla.firefox.plist";
     const SYSTEM_MANAGED_STORAGE: &str =
         "/Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json";
     const SUPPORT_DIR: &str = "/Library/Application Support/SensibleFox";
+    const SYSTEM_APP: &str = "/Applications/Firefox.app";
 
     pub fn run() {
-        let profiles = discover_profiles();
-        let user_managed = user_managed_storage_path();
-        let policy_path = Path::new(POLICY_PLIST);
+        let profiles = profile::discover_profiles();
+        let user_home = profile::user_home().unwrap_or_default();
+        let user_policy = user_home.join("Library/Preferences/org.mozilla.firefox.plist");
+        let user_managed = user_home.join("Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json");
+        let user_app = user_home.join("Applications/Firefox.app");
+
+        let system_policy = Path::new(SYSTEM_POLICY_PLIST);
         let system_managed = Path::new(SYSTEM_MANAGED_STORAGE);
         let support_dir = Path::new(SUPPORT_DIR);
+        let system_app = Path::new(SYSTEM_APP);
 
         let mut items: Vec<(String, PathBuf)> = Vec::new();
         for p in &profiles {
             items.push((format!("Profile: {}", p.display()), p.clone()));
         }
-        if policy_path.exists() {
-            items.push((format!("System policy plist: {}", policy_path.display()), policy_path.into()));
+        if system_policy.exists() {
+            items.push((format!("System policy plist: {}", system_policy.display()), system_policy.into()));
+        }
+        if user_policy.exists() {
+            items.push((format!("User policy plist: {}", user_policy.display()), user_policy.into()));
         }
         if system_managed.exists() {
             items.push((format!("System uBO managed storage: {}", system_managed.display()), system_managed.into()));
         }
-        if let Some(ref p) = user_managed {
-            if p.exists() {
-                items.push((format!("User uBO managed storage: {}", p.display()), p.clone()));
-            }
+        if user_managed.exists() {
+            items.push((format!("User uBO managed storage: {}", user_managed.display()), user_managed.into()));
+        }
+        if system_app.exists() {
+            items.push((format!("System Firefox app: {}", system_app.display()), system_app.into()));
+        }
+        if user_app.exists() {
+            items.push((format!("User Firefox app: {}", user_app.display()), user_app.into()));
         }
         if support_dir.exists() {
             items.push((format!("Installer support files: {}", support_dir.display()), support_dir.into()));
@@ -382,33 +467,53 @@ mod clean {
             return;
         }
 
-        for i in picks {
-            let (label, path) = &items[i];
-            let needs_root = path.starts_with("/Library");
-            match remove_path(path, needs_root) {
-                Ok(()) => println!("  {} {}", style("✓").green(), label),
-                Err(e) => println!("  {} {}: {}", style("✗").red(), label, e),
-            }
+        let mut root_paths = Vec::new();
+        let mut user_paths = Vec::new();
+
+        for &i in &picks {
+            let path = &items[i].1;
+            let needs_root = path.starts_with("/Library") || path.starts_with("/Applications");
             if profiles.contains(path) {
                 profile::unregister(path);
+            }
+            if needs_root && !super::is_root() {
+                root_paths.push(path);
+            } else {
+                user_paths.push(path);
+            }
+        }
+
+        for path in user_paths {
+            match remove_local_path(path) {
+                Ok(()) => println!("  {} {}", style("✓").green(), path.display()),
+                Err(e) => println!("  {} {}: {}", style("✗").red(), path.display(), e),
+            }
+        }
+
+        if !root_paths.is_empty() {
+            println!("  {} Deleting system files requires sudo. Please enter your password if prompted.", style("ℹ").cyan());
+            let mut cmd = Command::new("sudo");
+            cmd.arg("rm").arg("-rf");
+            for path in &root_paths {
+                cmd.arg(path);
+            }
+            match cmd.status() {
+                Ok(status) if status.success() => {
+                    for path in root_paths {
+                        println!("  {} {}", style("✓").green(), path.display());
+                    }
+                }
+                _ => {
+                    for path in root_paths {
+                        println!("  {} Failed to delete system file: {}", style("✗").red(), path.display());
+                    }
+                }
             }
         }
     }
 
-    fn remove_path(path: &Path, needs_root: bool) -> Result<(), String> {
+    fn remove_local_path(path: &Path) -> Result<(), String> {
         if !path.exists() {
-            return Ok(());
-        }
-        if needs_root && !is_root() {
-            let target = path.to_string_lossy().replace('\'', "'\\''");
-            let script = format!("do shell script \"rm -rf '{}'\" with administrator privileges", target);
-            let status = Command::new("osascript")
-                .args(["-e", &script])
-                .status()
-                .map_err(|e| format!("osascript: {e}"))?;
-            if !status.success() {
-                return Err("admin authorisation cancelled".into());
-            }
             return Ok(());
         }
         if path.is_dir() {
@@ -418,33 +523,5 @@ mod clean {
         }
     }
 
-    fn discover_profiles() -> Vec<PathBuf> {
-        let Some(root) = profile::firefox_root() else { return Vec::new() };
-        let profiles_dir = root.join("Profiles");
-        let mut out = Vec::new();
-        if let Ok(rd) = fs::read_dir(&profiles_dir) {
-            for entry in rd.flatten() {
-                let p = entry.path();
-                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name == "sensiblefox" || name.starts_with("sensiblefox") || name.ends_with(".sensiblefox") {
-                    out.push(p);
-                }
-            }
-        }
-        out
-    }
 
-    fn user_managed_storage_path() -> Option<PathBuf> {
-        dirs::home_dir().map(|h| h.join("Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json"))
-    }
-
-    fn is_root() -> bool {
-        Command::new("id")
-            .arg("-u")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
-            .map(|uid| uid == 0)
-            .unwrap_or(false)
-    }
 }

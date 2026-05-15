@@ -135,7 +135,7 @@ impl InstallTarget {
     pub fn app_path(&self) -> PathBuf {
         match self {
             InstallTarget::User => {
-                let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+                let home = crate::profile::user_home().unwrap_or_else(|| PathBuf::from("/tmp"));
                 home.join("Applications/Firefox.app")
             }
             InstallTarget::System => {
@@ -764,7 +764,7 @@ fn which_firefox() -> Option<PathBuf> {
 
     for path in common_paths {
         let expanded = if path.starts_with("~/") {
-            dirs::home_dir().map(|h| h.join(&path[2..]))
+            crate::profile::user_home().map(|h| h.join(&path[2..]))
         } else {
             Some(PathBuf::from(path))
         };

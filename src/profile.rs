@@ -29,8 +29,17 @@ fn install_parent_directory_for_hash(firefox_binary: &Path) -> Option<String> {
     Some(s)
 }
 
+pub fn user_home() -> Option<PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if !sudo_user.is_empty() {
+            return Some(PathBuf::from(format!("/Users/{}", sudo_user)));
+        }
+    }
+    dirs::home_dir()
+}
+
 pub fn firefox_root() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join("Library/Application Support/Firefox"))
+    user_home().map(|h| h.join("Library/Application Support/Firefox"))
 }
 
 pub fn default_profile_path() -> PathBuf {
@@ -38,6 +47,22 @@ pub fn default_profile_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("Profiles")
         .join(PROFILE_NAME)
+}
+
+pub fn discover_profiles() -> Vec<PathBuf> {
+    let Some(root) = firefox_root() else { return Vec::new() };
+    let profiles_dir = root.join("Profiles");
+    let mut out = Vec::new();
+    if let Ok(rd) = fs::read_dir(&profiles_dir) {
+        for entry in rd.flatten() {
+            let p = entry.path();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == "sensiblefox" || name.starts_with("sensiblefox") || name.ends_with(".sensiblefox") {
+                out.push(p);
+            }
+        }
+    }
+    out
 }
 
 pub fn create(profile_path: &Path) -> Result<(), String> {

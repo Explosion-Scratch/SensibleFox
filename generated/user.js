@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-11 14:44:02
+// Generated: 2026-05-12 17:09:57
 
 
 // ═══════════════════════════════════════════
@@ -2914,8 +2914,8 @@ user_pref("image.mem.decode_bytes_at_a_time", 65536);
 user_pref("network.buffer.cache.size", 65535);
 user_pref("network.buffer.cache.count", 48);
 user_pref("network.http.max-connections", 1800);
-user_pref("network.http.max-persistent-connections-per-server", 10);
-user_pref("network.http.max-urgent-start-excessive-connections-per-host", 5);
+user_pref("network.http.max-persistent-connections-per-server", 30);
+user_pref("network.http.max-urgent-start-excessive-connections-per-host", 10);
 user_pref("network.http.pacing.requests.enabled", false);
 user_pref("network.dnsCacheEntries", 10000);
 user_pref("network.dnsCacheExpiration", 3600);
@@ -2923,6 +2923,22 @@ user_pref("network.dnsCacheExpirationGracePeriod", 120);
 user_pref("network.ssl_tokens_cache_capacity", 10240);
 user_pref("browser.tabs.min_inactive_duration_before_unload", 300000);
 user_pref("dom.ipc.processPrelaunch.fission.number", 1);
+
+// Added from Betterfox/Fastfox master
+user_pref("dom.enable_web_task_scheduling", true);
+user_pref("dom.script_loader.bytecode_cache.enabled", true);
+user_pref("dom.script_loader.bytecode_cache.strategy", 0);
+user_pref("network.http.request.max-start-delay", 5);
+user_pref("network.websocket.max-connections", 200);
+user_pref("network.dns.max_high_priority_threads", 40);
+user_pref("network.dns.max_any_priority_threads", 24);
+user_pref("browser.cache.disk.max_chunks_memory_usage", 40960);
+user_pref("browser.cache.disk.max_priority_chunks_memory_usage", 40960);
+user_pref("browser.cache.disk.preload_chunk_count", 4);
+user_pref("browser.cache.frecency_half_life_hours", 6);
+user_pref("browser.cache.check_doc_frequency", 3);
+user_pref("image.mem.shared.unmap.min_expiration_ms", 120000);
+user_pref("dom.iframe_lazy_loading.enabled", true);
 
 // ═══════════════════════════════════════════
 // SPEED POLICY — tunable goals (override locally if you want a different tradeoff)
@@ -2966,7 +2982,7 @@ user_pref("network.prefetch-next", true);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.dns.disablePrefetchFromHTTPS", false);
 user_pref("network.preconnect", true);
-user_pref("network.http.speculative-parallel-limit", 10);
+user_pref("network.http.speculative-parallel-limit", 18);
 user_pref("browser.urlbar.speculativeConnect.enabled", true);
 user_pref("browser.places.speculativeConnect.enabled", true);
 user_pref("network.early-hints.enabled", true);
@@ -2975,6 +2991,7 @@ user_pref("network.http.priority_header.enabled", true);
 user_pref("network.http.http2.send-priority-frames", true);
 user_pref("network.http.http3.enable", true);
 user_pref("network.http.http3.support_version1", true);
+user_pref("network.http.http3.enable_0rtt", true);
 user_pref("browser.startup.preXulSkeletonUI", true);
 user_pref("browser.privatebrowsing.resetPBM.showConfirmationDialog", false);
 

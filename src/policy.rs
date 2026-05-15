@@ -6,20 +6,23 @@ use std::path::{Path, PathBuf};
 const POLICIES_JSON: &str = include_str!("../assets/policies.json");
 const UBLOCK_MANAGED_STORAGE: &str = include_str!("../assets/uBlock0@raymondhill.net.json");
 
-const FIREFOX_PREFS_PLIST: &str = "/Library/Preferences/org.mozilla.firefox.plist";
-
 pub fn apply_macos_policies() -> Result<(), String> {
     let policies = parse_policy_map()?;
     let plist = firefox_plist(&policies)?;
-    let path = Path::new(FIREFOX_PREFS_PLIST);
+    
+    let path = if crate::is_root() {
+        PathBuf::from("/Library/Preferences/org.mozilla.firefox.plist")
+    } else {
+        crate::profile::user_home().unwrap_or_default().join("Library/Preferences/org.mozilla.firefox.plist")
+    };
 
-    write_root_file(path, plist.as_bytes(), 0o644)?;
-    validate_plist(path)?;
+    write_root_file(&path, plist.as_bytes(), 0o644)?;
+    validate_plist(&path)?;
 
     println!(
         "  {} Firefox policies configured in {}",
         style("✓").green(),
-        style(FIREFOX_PREFS_PLIST).cyan()
+        style(path.display()).cyan()
     );
 
     Ok(())
@@ -128,7 +131,11 @@ fn escape_xml(value: &str) -> String {
 }
 
 pub fn apply_system_managed_storage() -> Result<(), String> {
-    let dir = Path::new("/Library/Application Support/Mozilla/ManagedStorage");
+    let dir = if crate::is_root() {
+        PathBuf::from("/Library/Application Support/Mozilla/ManagedStorage")
+    } else {
+        crate::profile::user_home().unwrap_or_default().join("Library/Application Support/Mozilla/ManagedStorage")
+    };
     let path = dir.join("uBlock0@raymondhill.net.json");
 
     write_root_file(&path, UBLOCK_MANAGED_STORAGE.as_bytes(), 0o644)?;

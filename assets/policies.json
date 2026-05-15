@@ -24,13 +24,7 @@
     },
     "SearchEngines": {
       "Default": "Google",
-      "Remove": [
-        "Bing",
-        "Amazon.com",
-        "DuckDuckGo",
-        "eBay",
-        "Wikipedia (en)"
-      ]
+      "Remove": ["Bing", "Amazon.com", "DuckDuckGo", "eBay", "Wikipedia (en)"]
     },
     "UserMessaging": {
       "WhatsNew": false,
@@ -65,6 +59,17 @@
         "default_area": "navbar",
         "private_browsing": true
       }
+    },
+    "Preferences": {
+      "network.prefetch-next": true,
+      "network.dns.disablePrefetch": false,
+      "network.dns.disablePrefetchFromHTTPS": false,
+      "network.predictor.enabled": true,
+      "network.predictor.enable-prefetch": true,
+      "network.preconnect": true,
+      "network.http.speculative-parallel-limit": 10,
+      "browser.urlbar.speculativeConnect.enabled": true,
+      "browser.places.speculativeConnect.enabled": true
     }
   }
 }

@@ -44,7 +44,9 @@
         "https://gitflic.ru/project/magnolia1234/bypass-paywalls-clean-filters/blob/raw?file=bpc-paywall-filter.txt",
         "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.mini.txt",
         "https://raw.githubusercontent.com/liamengland1/miscfilters/master/antipaywall.txt",
+        "https://secure.fanboy.co.nz/fanboy-agegate.txt",
         "https://raw.githubusercontent.com/yokoffing/filterlists/main/annoyance_list.txt",
+        "https://raw.githubusercontent.com/yokoffing/filterlists/refs/heads/main/click2load.txt",
         "https://raw.githubusercontent.com/yokoffing/filterlists/main/youtube_clear_view.txt"
       ]
     }

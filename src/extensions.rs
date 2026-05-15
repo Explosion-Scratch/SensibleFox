@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::Duration;
 
 const UBLOCK_ID: &str = "uBlock0@raymondhill.net";
-const UBLOCK_UUID: &str = "14d4bd8f-4d00-422a-92b2-ba06bd9deaa7";
 
 const UBLOCK_XPI_URL: &str = concat!(
     "https://addons.mozilla.org/firefox/downloads/latest/",
@@ -24,20 +23,9 @@ const UBLOCK_MANAGED_STORAGE: &str = include_str!(concat!(
     "/assets/uBlock0@raymondhill.net.json"
 ));
 
-const DEFAULT_EXTENSIONS: &[(&str, &str)] = &[
-    ("formautofill@mozilla.org", "647ab118-a5e4-43c4-90e3-411d4e5155fe"),
-    ("pictureinpicture@mozilla.org", "882abc45-e743-4032-9766-4571e5dae35d"),
-    ("screenshots@mozilla.org", "11098328-de4a-4b76-a17e-b26039cae0cc"),
-    ("webcompat-reporter@mozilla.org", "6ec2ebcc-1aa1-4fa5-a339-68fec0201ea9"),
-    ("webcompat@mozilla.org", "0b52c378-083f-4fbf-98ee-1c1166674cc6"),
-    ("default-theme@mozilla.org", "35c104e7-5b2b-4d06-a440-5cfede7cc8dd"),
-    ("addons-search-detection@mozilla.com", "b138d06f-2e3c-4a31-8329-f03604fd5430"),
-];
-
 pub fn install_ublock(profile_path: &Path, progress: &Progress) {
     match install_ublock_xpi(profile_path, progress) {
         Ok(bytes) => {
-            write_extension_prefs(profile_path);
             write_ublock_managed_storage();
             if !progress.is_quiet() {
                 println!(
@@ -165,7 +153,7 @@ fn download_ublock(
 }
 
 pub fn write_ublock_managed_storage() {
-    let Some(home) = dirs::home_dir() else {
+    let Some(home) = crate::profile::user_home() else {
         eprintln!(
             "  {} Could not determine home directory — skipping uBO managed storage",
             style("!").yellow()
@@ -202,49 +190,3 @@ pub fn write_ublock_managed_storage() {
     }
 }
 
-fn write_extension_prefs(profile_path: &Path) {
-    let user_js_path = profile_path.join("user.js");
-
-    let existing = fs::read_to_string(&user_js_path).unwrap_or_default();
-    if existing.contains("\"extensions.webextensions.uuids\"") {
-        return;
-    }
-
-    let mut file = match fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&user_js_path)
-    {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!(
-                "  {} Could not append extension prefs to user.js: {e}",
-                style("!").yellow()
-            );
-            return;
-        }
-    };
-
-    let _ = writeln!(file, "\n// ═══════════════════════════════════════════");
-    let _ = writeln!(file, "// EXTENSIONS");
-    let _ = writeln!(file, "// ═══════════════════════════════════════════");
-
-    let mut uuids: Vec<String> = DEFAULT_EXTENSIONS
-        .iter()
-        .map(|(id, uuid)| format!("\"{}\":\"{}\"", id, uuid))
-        .collect();
-    uuids.push(format!("\"{}\":\"{}\"", UBLOCK_ID, UBLOCK_UUID));
-    let uuid_json = format!("{{{}}}", uuids.join(","));
-    let uuid_pref_value =
-        serde_json::to_string(&uuid_json).unwrap_or_else(|_| "\"{}\"".to_string());
-
-    let _ = writeln!(
-        file,
-        "user_pref(\"extensions.webextensions.uuids\", {});",
-        uuid_pref_value
-    );
-    let _ = writeln!(
-        file,
-        "user_pref(\"extensions.webextensions.ExtensionStorageIDB.migrated.{UBLOCK_ID}\", true);"
-    );
-}
