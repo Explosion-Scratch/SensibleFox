@@ -295,27 +295,51 @@ build_pkg() {
     rm -f "$component" "$dist_xml"
 }
 
-# ── Build the online pkg ─────────────────────────────────────────────────
-echo "  → Building online .pkg..."
+# ── Build the online pkgs ────────────────────────────────────────────────
+echo "  → Building online .pkgs..."
 ONLINE_ROOT="$DIST_DIR/pkg-root"
 ONLINE_SCRIPTS="$DIST_DIR/pkg-scripts"
 ONLINE_RES="$DIST_DIR/pkg-resources"
-rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" "$DIST_DIR/SensibleFox.pkg"
+rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" "$DIST_DIR/SensibleFox-universal.pkg" "$DIST_DIR/SensibleFox-aarch64.pkg" "$DIST_DIR/SensibleFox-x86_64.pkg"
 mkdir -p "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
+
+# Build universal pkg
+SENSIBLEFOX_CLI="$DIST_DIR/sensiblefox-universal"
 build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
-    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox.pkg" "$FF_VERSION" "yes"
+    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-universal.pkg" "$FF_VERSION" "yes"
+
+# Build aarch64 pkg
+if [ "${SENSIBLEFOX_NATIVE_ONLY:-0}" != "1" ]; then
+    SENSIBLEFOX_CLI="$BIN_ARM"
+    build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
+        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-aarch64.pkg" "$FF_VERSION" "yes"
+
+    # Build x86_64 pkg
+    SENSIBLEFOX_CLI="$BIN_X64"
+    build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
+        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-x86_64.pkg" "$FF_VERSION" "yes"
+fi
+
 rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
+SENSIBLEFOX_CLI="$DIST_DIR/sensiblefox-universal" # Restore default
 
 if [ -n "${NOTARYTOOL_PROFILE:-}" ]; then
     [ -n "${DEVELOPER_ID_INSTALLER:-}" ] || { echo "  ✗ NOTARYTOOL_PROFILE needs DEVELOPER_ID_INSTALLER"; exit 1; }
-    echo "  → Notarizing online .pkg..."
-    xcrun notarytool submit "$DIST_DIR/SensibleFox.pkg" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
-    xcrun stapler staple "$DIST_DIR/SensibleFox.pkg"
+    echo "  → Notarizing online .pkgs..."
+    xcrun notarytool submit "$DIST_DIR/SensibleFox-universal.pkg" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
+    xcrun stapler staple "$DIST_DIR/SensibleFox-universal.pkg"
+    
+    if [ "${SENSIBLEFOX_NATIVE_ONLY:-0}" != "1" ]; then
+        xcrun notarytool submit "$DIST_DIR/SensibleFox-aarch64.pkg" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
+        xcrun stapler staple "$DIST_DIR/SensibleFox-aarch64.pkg"
+        xcrun notarytool submit "$DIST_DIR/SensibleFox-x86_64.pkg" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
+        xcrun stapler staple "$DIST_DIR/SensibleFox-x86_64.pkg"
+    fi
 fi
 
-SIZE=$(du -h "$DIST_DIR/SensibleFox.pkg" | cut -f1 | tr -d ' ')
+SIZE=$(du -h "$DIST_DIR/SensibleFox-universal.pkg" | cut -f1 | tr -d ' ')
 echo ""
-echo "  ✓ Built dist/SensibleFox.pkg ($SIZE) — Firefox $FF_VERSION (~${FF_SIZE_MB} MB download)"
+echo "  ✓ Built dist/SensibleFox-universal.pkg ($SIZE) — Firefox $FF_VERSION (~${FF_SIZE_MB} MB download)"
 
 # ── Build the offline pkg (Firefox.app pre-staged in the payload) ────────
 if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
@@ -364,8 +388,9 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
 fi
 
 echo ""
-echo "    Install: open dist/SensibleFox.pkg"
-echo "    Or:      sudo installer -pkg dist/SensibleFox.pkg -target /"
+echo ""
+echo "    Install: open dist/SensibleFox-universal.pkg"
+echo "    Or:      sudo installer -pkg dist/SensibleFox-universal.pkg -target /"
 if [ -z "${DEVELOPER_ID_INSTALLER:-}" ]; then
     echo "    Note:    Unsigned; right-click → Open on first launch."
 fi

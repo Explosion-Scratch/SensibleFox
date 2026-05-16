@@ -395,6 +395,9 @@ user_pref("browser.search.separatePrivateDefault.ui.enabled", false);
 // ═══════════════════════════════════════════
 // TAB & UX BEHAVIOR — sensible defaults
 // ═══════════════════════════════════════════
+user_pref("browser.link.open_newwindow", 3);
+user_pref("browser.link.open_newwindow.restriction", 0);
+user_pref("browser.tabs.splitView.enabled", false);
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.warnOnQuitShortcut", false);
 user_pref("browser.warnOnQuit", false);
@@ -431,6 +434,8 @@ user_pref("browser.formfill.enable", false);
 // ═══════════════════════════════════════════
 // MISC UX — polish
 // ═══════════════════════════════════════════
+user_pref("widget.non-native-theme.scrollbar.style", 1);
+user_pref("ui.useOverlayScrollbars", 1);
 user_pref("browser.compactmode.show", true);
 user_pref("browser.display.focus_ring_on_anything", true);
 user_pref("browser.display.focus_ring_style", 0);

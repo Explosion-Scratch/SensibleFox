@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-16 10:53:03
+// Generated: 2026-05-16 11:12:46
 
 
 // ═══════════════════════════════════════════
@@ -3055,6 +3055,9 @@ user_pref("browser.search.separatePrivateDefault.ui.enabled", false);
 // ═══════════════════════════════════════════
 // TAB & UX BEHAVIOR — sensible defaults
 // ═══════════════════════════════════════════
+user_pref("browser.link.open_newwindow", 3);
+user_pref("browser.link.open_newwindow.restriction", 0);
+user_pref("browser.tabs.splitView.enabled", false);
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.warnOnQuitShortcut", false);
 user_pref("browser.warnOnQuit", false);
@@ -3075,10 +3078,11 @@ user_pref("browser.search.context.loadInBackground", true);
 // ═══════════════════════════════════════════
 // DOWNLOADS — sensible handling
 // ═══════════════════════════════════════════
-user_pref("browser.download.always_ask_before_handling_new_types", true);
+user_pref("browser.download.always_ask_before_handling_new_types", false);
 user_pref("browser.download.manager.addToRecentDocs", false);
 user_pref("browser.download.autohideButton", true);
 user_pref("browser.download.alwaysOpenPanel", false);
+user_pref("browser.download.manager.showWhenStarting", false);
 user_pref("browser.download.open_pdf_attachments_inline", true);
 user_pref("browser.download.useDownloadDir", true);
 
@@ -3090,6 +3094,8 @@ user_pref("browser.formfill.enable", false);
 // ═══════════════════════════════════════════
 // MISC UX — polish
 // ═══════════════════════════════════════════
+user_pref("widget.non-native-theme.scrollbar.style", 1);
+user_pref("ui.useOverlayScrollbars", 1);
 user_pref("browser.compactmode.show", true);
 user_pref("browser.display.focus_ring_on_anything", true);
 user_pref("browser.display.focus_ring_style", 0);

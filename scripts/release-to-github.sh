@@ -26,19 +26,38 @@ VERSION_RAW="${1:-}"
 VER="${VERSION_RAW#v}"
 TAG="v${VER}"
 
-PKG_PATH="${PKG_PATH:-$ROOT_DIR/dist/SensibleFox.pkg}"
-BIN_PATH="${BIN_PATH:-$ROOT_DIR/target/release/sensiblefox}"
+PKG_UNIVERSAL="$ROOT_DIR/dist/SensibleFox-universal.pkg"
+PKG_AARCH64="$ROOT_DIR/dist/SensibleFox-aarch64.pkg"
+PKG_X86_64="$ROOT_DIR/dist/SensibleFox-x86_64.pkg"
 
-[[ -f "$PKG_PATH" ]] || die "missing pkg: $PKG_PATH (run build-pkg.sh first)"
-[[ -f "$BIN_PATH" ]] || die "missing binary: $BIN_PATH (run: cargo build --release)"
+BIN_UNIVERSAL="$ROOT_DIR/dist/sensiblefox-universal"
+BIN_AARCH64="$ROOT_DIR/target/aarch64-apple-darwin/release/sensiblefox"
+BIN_X86_64="$ROOT_DIR/target/x86_64-apple-darwin/release/sensiblefox"
+
+[[ -f "$PKG_UNIVERSAL" ]] || die "missing pkg: $PKG_UNIVERSAL (run build-pkg.sh first)"
+[[ -f "$BIN_UNIVERSAL" ]] || die "missing binary: $BIN_UNIVERSAL (run build-pkg.sh first)"
+
+ASSETS=("$PKG_UNIVERSAL" "$BIN_UNIVERSAL")
+
+if [[ -f "$PKG_AARCH64" ]]; then ASSETS+=("$PKG_AARCH64"); fi
+if [[ -f "$PKG_X86_64" ]]; then ASSETS+=("$PKG_X86_64"); fi
+if [[ -f "$BIN_AARCH64" ]]; then
+    cp "$BIN_AARCH64" "$ROOT_DIR/dist/sensiblefox-aarch64"
+    ASSETS+=("$ROOT_DIR/dist/sensiblefox-aarch64")
+fi
+if [[ -f "$BIN_X86_64" ]]; then
+    cp "$BIN_X86_64" "$ROOT_DIR/dist/sensiblefox-x86_64"
+    ASSETS+=("$ROOT_DIR/dist/sensiblefox-x86_64")
+fi
+
 command -v gh >/dev/null 2>&1 || die "gh not found — install GitHub CLI and run: gh auth login"
 
 if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
-    gh release upload "$TAG" "$PKG_PATH" "$BIN_PATH" --clobber
+    gh release upload "$TAG" "${ASSETS[@]}" --clobber
     printf '%s\n' "Uploaded assets to existing release $TAG"
 else
-    gh release create "$TAG" "$PKG_PATH" "$BIN_PATH" \
+    gh release create "$TAG" "${ASSETS[@]}" \
         --title "$TAG" \
         --generate-notes
-    printf '%s\n' "Created release $TAG with pkg + binary"
+    printf '%s\n' "Created release $TAG with pkgs + binaries"
 fi
