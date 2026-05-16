@@ -38,8 +38,8 @@
         "ublock-quick-fixes",
         "ublock-unbreak",
         "urlhaus-1",
-        "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/BrowseWebsitesWithoutLoggingIn.txt",
         "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/ClearURLs%20for%20uBo/clear_urls_uboified.txt",
+        "https://raw.githubusercontent.com/DandelionSprout/adfilt/refs/heads/master/AnnoyancesList",
         "https://filters.adtidy.org/extension/ublock/filters/3.txt",
         "https://gitflic.ru/project/magnolia1234/bypass-paywalls-clean-filters/blob/raw?file=bpc-paywall-filter.txt",
         "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.mini.txt",
@@ -47,8 +47,7 @@
         "https://secure.fanboy.co.nz/fanboy-agegate.txt",
         "https://raw.githubusercontent.com/yokoffing/filterlists/main/annoyance_list.txt",
         "https://raw.githubusercontent.com/yokoffing/filterlists/refs/heads/main/click2load.txt",
-        "https://raw.githubusercontent.com/yokoffing/filterlists/main/youtube_clear_view.txt",
-        "https://raw.githubusercontent.com/DandelionSprout/adfilt/refs/heads/master/AnnoyancesList"
+        "https://raw.githubusercontent.com/yokoffing/filterlists/main/youtube_clear_view.txt"
       ]
     }
   }
