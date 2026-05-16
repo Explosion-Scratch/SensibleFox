@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-12 17:09:57
+// Generated: 2026-05-15 22:03:14
 
 
 // ═══════════════════════════════════════════
@@ -2920,6 +2920,7 @@ user_pref("network.http.pacing.requests.enabled", false);
 user_pref("network.dnsCacheEntries", 10000);
 user_pref("network.dnsCacheExpiration", 3600);
 user_pref("network.dnsCacheExpirationGracePeriod", 120);
+user_pref("network.dns.disableIPv6", false);
 user_pref("network.ssl_tokens_cache_capacity", 10240);
 user_pref("browser.tabs.min_inactive_duration_before_unload", 300000);
 user_pref("dom.ipc.processPrelaunch.fission.number", 1);

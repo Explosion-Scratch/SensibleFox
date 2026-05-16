@@ -1,9 +1,8 @@
+use crate::paths::{self, PROFILE_NAME};
 use naive_cityhash::cityhash64;
 use console::style;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-const PROFILE_NAME: &str = "sensiblefox";
 
 fn mozilla_install_hash_hex(install_parent_path: &str) -> String {
     let trimmed = install_parent_path.trim_end_matches('/');
@@ -29,17 +28,37 @@ fn install_parent_directory_for_hash(firefox_binary: &Path) -> Option<String> {
     Some(s)
 }
 
+#[cfg(unix)]
+fn effective_uid() -> u32 {
+    extern "C" {
+        fn geteuid() -> u32;
+    }
+    unsafe { geteuid() }
+}
+
 pub fn user_home() -> Option<PathBuf> {
+    #[cfg(unix)]
+    if effective_uid() != 0 {
+        return dirs::home_dir();
+    }
+    #[cfg(not(unix))]
+    {
+        return dirs::home_dir();
+    }
+
     if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        if !sudo_user.is_empty() {
-            return Some(PathBuf::from(format!("/Users/{}", sudo_user)));
+        if !sudo_user.is_empty() && sudo_user != "root" {
+            let candidate = PathBuf::from(format!("/Users/{sudo_user}"));
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
         }
     }
     dirs::home_dir()
 }
 
 pub fn firefox_root() -> Option<PathBuf> {
-    user_home().map(|h| h.join("Library/Application Support/Firefox"))
+    user_home().map(|h| h.join(paths::FIREFOX_ROOT_REL))
 }
 
 pub fn default_profile_path() -> PathBuf {
@@ -49,6 +68,11 @@ pub fn default_profile_path() -> PathBuf {
         .join(PROFILE_NAME)
 }
 
+pub fn is_sensiblefox_profile(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else { return false };
+    name == PROFILE_NAME || name.starts_with(PROFILE_NAME) || name.ends_with(".sensiblefox")
+}
+
 pub fn discover_profiles() -> Vec<PathBuf> {
     let Some(root) = firefox_root() else { return Vec::new() };
     let profiles_dir = root.join("Profiles");
@@ -56,8 +80,7 @@ pub fn discover_profiles() -> Vec<PathBuf> {
     if let Ok(rd) = fs::read_dir(&profiles_dir) {
         for entry in rd.flatten() {
             let p = entry.path();
-            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name == "sensiblefox" || name.starts_with("sensiblefox") || name.ends_with(".sensiblefox") {
+            if is_sensiblefox_profile(&p) {
                 out.push(p);
             }
         }

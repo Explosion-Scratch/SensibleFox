@@ -9,14 +9,9 @@ const UBLOCK_MANAGED_STORAGE: &str = include_str!("../assets/uBlock0@raymondhill
 pub fn apply_macos_policies() -> Result<(), String> {
     let policies = parse_policy_map()?;
     let plist = firefox_plist(&policies)?;
-    
-    let path = if crate::is_root() {
-        PathBuf::from("/Library/Preferences/org.mozilla.firefox.plist")
-    } else {
-        crate::profile::user_home().unwrap_or_default().join("Library/Preferences/org.mozilla.firefox.plist")
-    };
+    let path = policy_plist_path();
 
-    write_root_file(&path, plist.as_bytes(), 0o644)?;
+    write_file(&path, plist.as_bytes())?;
     validate_plist(&path)?;
 
     println!(
@@ -24,8 +19,17 @@ pub fn apply_macos_policies() -> Result<(), String> {
         style("✓").green(),
         style(path.display()).cyan()
     );
-
     Ok(())
+}
+
+fn policy_plist_path() -> PathBuf {
+    if crate::is_root() {
+        PathBuf::from(crate::paths::SYSTEM_POLICY_PLIST)
+    } else {
+        crate::profile::user_home()
+            .unwrap_or_default()
+            .join(crate::paths::USER_POLICY_REL)
+    }
 }
 
 fn validate_plist(path: &Path) -> Result<(), String> {
@@ -131,67 +135,28 @@ fn escape_xml(value: &str) -> String {
 }
 
 pub fn apply_system_managed_storage() -> Result<(), String> {
-    let dir = if crate::is_root() {
-        PathBuf::from("/Library/Application Support/Mozilla/ManagedStorage")
+    let path = if crate::is_root() {
+        PathBuf::from(crate::paths::SYSTEM_MANAGED_STORAGE)
     } else {
-        crate::profile::user_home().unwrap_or_default().join("Library/Application Support/Mozilla/ManagedStorage")
+        crate::profile::user_home()
+            .unwrap_or_default()
+            .join(crate::paths::USER_MANAGED_REL)
     };
-    let path = dir.join("uBlock0@raymondhill.net.json");
-
-    write_root_file(&path, UBLOCK_MANAGED_STORAGE.as_bytes(), 0o644)?;
-
+    write_file(&path, UBLOCK_MANAGED_STORAGE.as_bytes())?;
     println!(
         "  {} System-wide uBlock managed storage configured",
         style("✓").green()
     );
-
     Ok(())
 }
 
-fn write_root_file(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
+fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("invalid output path: {}", path.display()))?;
     fs::create_dir_all(parent)
         .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
-
-    let tmp = temp_path(path);
-    fs::write(&tmp, bytes).map_err(|e| format!("failed to write {}: {e}", tmp.display()))?;
-
-    set_mode(&tmp, mode)?;
-
-    if let Err(e) = fs::rename(&tmp, path) {
-        let _ = fs::remove_file(&tmp);
-        return Err(format!("failed to install {}: {e}", path.display()));
-    }
-
-    set_mode(path, mode)?;
-    Ok(())
-}
-
-fn temp_path(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("sensiblefox.tmp");
-    path.with_file_name(format!(".{file_name}.tmp"))
-}
-
-#[cfg(unix)]
-fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs::metadata(path)
-        .map_err(|e| format!("failed to stat {}: {e}", path.display()))?
-        .permissions();
-    permissions.set_mode(mode);
-    fs::set_permissions(path, permissions)
-        .map_err(|e| format!("failed to chmod {}: {e}", path.display()))
-}
-
-#[cfg(not(unix))]
-fn set_mode(_path: &Path, _mode: u32) -> Result<(), String> {
-    Ok(())
+    fs::write(path, bytes).map_err(|e| format!("failed to write {}: {e}", path.display()))
 }
 
 #[cfg(test)]

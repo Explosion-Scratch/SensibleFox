@@ -1,23 +1,27 @@
 mod css;
 mod extensions;
 mod firefox;
+mod paths;
 mod policy;
 mod prefs;
 mod profile;
 mod progress;
+mod uninstall;
 mod upstream;
 
 use crate::progress::Progress;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use console::style;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 #[derive(Parser)]
-#[command(name = "sensiblefox")]
+#[command(name = "sensiblefox", version)]
 #[command(about = "Opinionated, clean Firefox for macOS — zero config")]
-#[command(version)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Cmd>,
+
     /// Configure the profile without launching Firefox
     #[arg(long)]
     profile_only: bool,
@@ -33,14 +37,6 @@ struct Cli {
     /// Reinstall Firefox even when a valid copy is already present
     #[arg(long)]
     replace_firefox: bool,
-
-    /// Pick which SensibleFox profiles, policies, and managed storage to delete
-    #[arg(long)]
-    clean: bool,
-
-    /// Re-fetch upstream prefs from Betterfox/arkenfox into generated/
-    #[arg(long)]
-    update_upstream: bool,
 
     /// Custom Firefox.app install directory
     #[arg(long, hide = true)]
@@ -63,31 +59,88 @@ struct Cli {
     status_file: Option<PathBuf>,
 }
 
+#[derive(Subcommand)]
+enum Cmd {
+    /// Re-fetch upstream prefs from Betterfox/arkenfox into generated/
+    Update,
+
+    /// Interactive picker to delete any SensibleFox / Firefox artifact
+    Clean,
+
+    /// Uninstall things SensibleFox installed
+    #[command(subcommand)]
+    Uninstall(UninstallCmd),
+
+    /// Delete a SensibleFox profile (interactive picker if NAME is omitted)
+    DeleteProfile {
+        /// Profile directory name, e.g. `sensiblefox` or `sensiblefox-1`
+        name: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum UninstallCmd {
+    /// Remove Firefox.app from /Applications and ~/Applications (profiles kept)
+    Firefox,
+
+    /// Remove SensibleFox policies + managed storage; reverts Firefox to
+    /// stock behaviour. Profile data, bookmarks, history, extensions are kept.
+    Sensiblefox,
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    let _ = ctrlc::set_handler(|| {
-        eprintln!("\n…interrupted — cleaning up");
-        std::process::exit(130);
-    });
+    #[cfg(unix)]
+    {
+        if let Ok(mut signals) = signal_hook::iterator::Signals::new(&[
+            signal_hook::consts::SIGINT,
+            signal_hook::consts::SIGTERM,
+        ]) {
+            std::thread::spawn(move || {
+                for _ in signals.forever() {
+                    std::process::exit(130);
+                }
+            });
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = ctrlc::set_handler(|| std::process::exit(130));
+    }
 
     if cli.status_file.is_none() && !cli.system_only {
         print_banner();
     }
 
-    if cli.clean {
-        clean::run();
-        return;
+    match cli.command {
+        Some(Cmd::Update) => {
+            upstream::fetch_all();
+            return;
+        }
+        Some(Cmd::Clean) => {
+            uninstall::clean_interactive();
+            return;
+        }
+        Some(Cmd::Uninstall(UninstallCmd::Firefox)) => {
+            uninstall::uninstall_firefox();
+            return;
+        }
+        Some(Cmd::Uninstall(UninstallCmd::Sensiblefox)) => {
+            uninstall::revert_to_stock();
+            return;
+        }
+        Some(Cmd::DeleteProfile { ref name }) => {
+            uninstall::delete_profile(name.as_deref());
+            return;
+        }
+        None => {}
     }
 
-    if cli.update_upstream {
-        upstream::fetch_all();
-        return;
-    }
+    run_install(cli);
+}
 
-    // CLI default: install Firefox to /Applications, apply policies, configure
-    // user profile — same as the PKG. Pass --user to install to ~/Applications,
-    // --no-policies to skip the macOS policy plist.
+fn run_install(cli: Cli) {
     let install_target = if let Some(ref custom) = cli.app_dir {
         firefox::InstallTarget::Custom(custom.join("Firefox.app"))
     } else if cli.user {
@@ -96,81 +149,68 @@ fn main() {
         firefox::InstallTarget::System
     };
 
-    if !is_root() && matches!(install_target, firefox::InstallTarget::System) && !cli.profile_only {
-        println!("  {} Elevating to root for system-wide installation...", style("ℹ").cyan());
+    // Elevation strategy: do ONLY the system-side work (install Firefox to
+    // /Applications + write /Library policies) under sudo, then continue as
+    // the original user so profile files end up user-owned. Mirrors the PKG
+    // postinstall split.
+    let mut system_done_via_sudo = false;
+    if !is_root()
+        && matches!(install_target, firefox::InstallTarget::System)
+        && !cli.profile_only
+        && !cli.system_only
+    {
+        println!(
+            "  {} Elevating to root to install Firefox and write system policies...",
+            style("ℹ").cyan()
+        );
         let current_exe = std::env::current_exe().expect("Failed to get current executable path");
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        let status = std::process::Command::new("sudo")
-            .arg(current_exe)
-            .args(args)
-            .status()
-            .expect("Failed to execute sudo");
-        std::process::exit(status.code().unwrap_or(1));
+        let elevated_status = std::env::temp_dir().join("sensiblefox-cli-elevated.status");
+        let mut sudo = std::process::Command::new("sudo");
+        sudo.arg(current_exe)
+            .arg("--system-only")
+            .arg("--unattended")
+            .arg("--status-file")
+            .arg(&elevated_status);
+        if cli.no_policies {
+            sudo.arg("--no-policies");
+        }
+        if cli.replace_firefox {
+            sudo.arg("--replace-firefox");
+        }
+        let status = sudo.status().expect("Failed to execute sudo");
+        let _ = std::fs::remove_file(&elevated_status);
+        if !status.success() {
+            std::process::exit(status.code().unwrap_or(1));
+        }
+        system_done_via_sudo = true;
     }
 
-    let apply_policies = !cli.no_policies && !cli.profile_only && (!cli.user || is_root());
+    let apply_policies = !cli.no_policies
+        && !cli.profile_only
+        && !system_done_via_sudo
+        && (!cli.user || is_root());
 
     let using_default_path = cli.profile_path.is_none();
-    let profile_path = cli
-        .profile_path
-        .clone()
-        .unwrap_or_else(profile::default_profile_path);
-    let mut final_profile_path = profile_path.clone();
+    let default_path = profile::default_profile_path();
+    let mut final_profile_path = cli.profile_path.clone().unwrap_or_else(|| default_path.clone());
     let mut just_launch = false;
 
     if cli.profile_path.is_none() && !cli.system_only {
         let existing = profile::discover_profiles();
         if !existing.is_empty() {
             if cli.unattended {
-                // Non-interactive: create a new profile if the default one exists
-                if profile_path.exists() {
-                    let mut i = 1;
-                    loop {
-                        let p = profile_path.with_file_name(format!("sensiblefox-{}", i));
-                        if !p.exists() {
-                            final_profile_path = p;
-                            break;
-                        }
-                        i += 1;
-                    }
+                if default_path.exists() {
+                    final_profile_path = next_unused_profile(&default_path);
                 }
             } else if cli.status_file.is_none() {
-                // Interactive: prompt
-                use dialoguer::{theme::ColorfulTheme, Select};
-                let mut items = vec!["Launch existing profile".to_string(), "Create new profile".to_string()];
-                for p in &existing {
-                    items.push(format!("Update profile: {}", p.file_name().unwrap_or_default().to_string_lossy()));
-                }
-
-                let selection = Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("SensibleFox profile(s) already exist. What would you like to do?")
-                    .default(0)
-                    .items(&items)
-                    .interact()
-                    .unwrap_or(0);
-
-                if selection == 0 {
-                    final_profile_path = existing[0].clone();
-                    just_launch = true;
-                } else if selection == 1 {
-                    let mut i = 1;
-                    loop {
-                        let p = profile_path.with_file_name(format!("sensiblefox-{}", i));
-                        if !p.exists() {
-                            final_profile_path = p;
-                            break;
-                        }
-                        i += 1;
-                    }
-                } else {
-                    final_profile_path = existing[selection - 2].clone();
-                }
+                let (chosen, launch_only) = prompt_existing_profile(&existing, &default_path);
+                final_profile_path = chosen;
+                just_launch = launch_only;
             }
         }
     }
 
     let profile_path = final_profile_path;
-
     let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
     let steps = firefox::step_indexes();
 
@@ -182,32 +222,31 @@ fn main() {
             style(profile_path.display()).cyan()
         );
         progress.step(steps.detect, "Detecting Firefox");
-        let firefox_path =
-            match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
-                Ok(p) => p,
-                Err(e) => fail(&progress, "Failed to find Firefox", &e),
-            };
-        println!("  Launching existing profile...\n");
+        let firefox_path = match firefox::detect_or_download(
+            &install_target,
+            cli.unattended,
+            cli.replace_firefox,
+            &progress,
+        ) {
+            Ok(p) => p,
+            Err(e) => fail(&progress, "Failed to find Firefox", &e),
+        };
         launch(&firefox_path, &profile_path);
         return;
     }
 
-    let firefox_path = if cli.profile_only {
-        // Second-phase PKG invocation: Firefox is already in place. Don't
-        // rewind the progress bar — start at the profile step.
-        let bin = install_target.bin_path();
-        if bin.exists() {
-            bin
-        } else {
-            progress.step(steps.detect, "Detecting Firefox");
-            match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
-                Ok(p) => p,
-                Err(e) => fail(&progress, "Could not install Firefox", &e),
-            }
-        }
+    let firefox_path = if cli.profile_only && install_target.bin_path().exists() {
+        // PKG user-phase fast path: Firefox is already in place from the
+        // system-phase. Don't rewind the progress bar.
+        install_target.bin_path()
     } else {
         progress.step(steps.detect, "Detecting Firefox");
-        match firefox::detect_or_download(&install_target, cli.unattended, cli.replace_firefox, &progress) {
+        match firefox::detect_or_download(
+            &install_target,
+            cli.unattended,
+            cli.replace_firefox,
+            &progress,
+        ) {
             Ok(p) => p,
             Err(e) => fail(&progress, "Could not install Firefox", &e),
         }
@@ -229,9 +268,6 @@ fn main() {
     }
 
     if cli.system_only {
-        // PKG splits root vs user work — advance the bar so the applet shows
-        // "Preparing user profile" rather than the last completed substep
-        // while the user-side phase spins up.
         progress.step(steps.profile, "Preparing user profile...");
         return;
     }
@@ -259,7 +295,7 @@ fn main() {
         profile::register_default(&profile_path, Some(firefox_path.as_path()));
     }
 
-    ensure_correct_ownership(&profile_path);
+    fix_user_ownership(&profile_path);
 
     progress.finish();
 
@@ -282,17 +318,66 @@ fn main() {
     }
 }
 
+fn next_unused_profile(default: &Path) -> PathBuf {
+    let mut i = 1;
+    loop {
+        let p = default.with_file_name(format!("sensiblefox-{}", i));
+        if !p.exists() {
+            return p;
+        }
+        i += 1;
+    }
+}
+
+fn prompt_existing_profile(existing: &[PathBuf], default: &Path) -> (PathBuf, bool) {
+    use dialoguer::{theme::ColorfulTheme, Select};
+    let mut items = vec![
+        "Launch existing profile".to_string(),
+        "Create new profile".to_string(),
+    ];
+    for p in existing {
+        items.push(format!(
+            "Update profile: {}",
+            p.file_name().unwrap_or_default().to_string_lossy()
+        ));
+    }
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("SensibleFox profile(s) already exist. What would you like to do?")
+        .default(0)
+        .items(&items)
+        .interact()
+        .unwrap_or(0);
+    match selection {
+        0 => (existing[0].clone(), true),
+        1 => (next_unused_profile(default), false),
+        i => (existing[i - 2].clone(), false),
+    }
+}
+
 fn fail(progress: &Progress, title: &str, detail: &str) -> ! {
     progress.fail(title, detail);
     eprintln!("  {} {}: {}", style("✗").red().bold(), title, detail);
     std::process::exit(1);
 }
 
-fn ensure_correct_ownership(path: &Path) {
+/// Restore user ownership over anything we may have written as root into the
+/// user's home. Only runs when the current process is root — normally the
+/// user-phase isn't elevated and this is a no-op.
+fn fix_user_ownership(profile_path: &Path) {
     if !is_root() {
         return;
     }
-    if let Some(user) = get_console_user() {
+    let Some(user) = get_console_user() else { return };
+    let Some(home) = profile::user_home() else { return };
+
+    let targets = [
+        profile_path.to_path_buf(),
+        home.join(paths::FIREFOX_ROOT_REL),
+        home.join(paths::MANAGED_STORAGE_DIR_REL),
+        home.join(paths::USER_POLICY_REL),
+    ];
+
+    for path in targets.iter().filter(|p| p.exists()) {
         let _ = Command::new("chown")
             .args(["-R", &user, &path.to_string_lossy()])
             .status();
@@ -329,34 +414,33 @@ fn get_console_user() -> Option<String> {
         })
 }
 
-fn launch(firefox_path: &PathBuf, profile_path: &PathBuf) {
-    let mut app_path = firefox_path.clone();
-    if app_path.ends_with("firefox") {
-        app_path.pop();
-    }
-    if app_path.ends_with("MacOS") {
-        app_path.pop();
-    }
-    if app_path.ends_with("Contents") {
-        app_path.pop();
-    }
+fn launch(firefox_path: &Path, profile_path: &Path) {
+    let app_path = firefox_app_bundle(firefox_path);
+    let already_running = firefox_is_running();
 
-    match Command::new("open")
-        .arg("-n")
-        .arg("-a")
-        .arg(&app_path)
-        .arg("--args")
-        .arg("--profile")
-        .arg(profile_path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        Ok(_) => {
-            println!(
-                "{} Firefox launched with sensiblefox profile",
-                style("✓").green().bold()
+    let mut cmd = launch_command_as_user();
+    cmd.arg("open").arg("-a").arg(&app_path);
+    if !already_running {
+        cmd.arg("--args").arg("--profile").arg(profile_path);
+    }
+    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
+    match cmd.status() {
+        Ok(s) if s.success() && already_running => println!(
+            "{} Firefox is already running — brought to the front",
+            style("✓").green().bold()
+        ),
+        Ok(s) if s.success() => println!(
+            "{} Firefox launched with sensiblefox profile",
+            style("✓").green().bold()
+        ),
+        Ok(s) => {
+            eprintln!(
+                "  {} `open` exited with status {} while launching Firefox",
+                style("✗").red().bold(),
+                s.code().unwrap_or(-1)
             );
+            std::process::exit(1);
         }
         Err(e) => {
             eprintln!(
@@ -369,6 +453,50 @@ fn launch(firefox_path: &PathBuf, profile_path: &PathBuf) {
             std::process::exit(1);
         }
     }
+}
+
+fn firefox_app_bundle(firefox_path: &Path) -> PathBuf {
+    let mut p = firefox_path.to_path_buf();
+    for tail in ["firefox", "MacOS", "Contents"] {
+        if p.ends_with(tail) {
+            p.pop();
+        }
+    }
+    p
+}
+
+/// Build an `open` invocation that runs in the console user's launchd
+/// context. Required when the CLI was elevated via sudo — otherwise Firefox
+/// would be spawned by /var/root and lock its profile against the real user.
+fn launch_command_as_user() -> Command {
+    if is_root() {
+        if let Some(user) = get_console_user() {
+            if let Some(uid) = uid_for(&user) {
+                let mut cmd = Command::new("launchctl");
+                cmd.args(["asuser", &uid.to_string(), "sudo", "-u", &user]);
+                return cmd;
+            }
+        }
+    }
+    Command::new("env")
+}
+
+fn uid_for(user: &str) -> Option<u32> {
+    Command::new("id")
+        .args(["-u", user])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
+}
+
+fn firefox_is_running() -> bool {
+    ["firefox", "firefox-bin"].iter().any(|name| {
+        Command::new("pgrep")
+            .args(["-x", name])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    })
 }
 
 fn print_banner() {
@@ -385,143 +513,4 @@ fn print_banner() {
         style("opinionated firefox · zero config · mac only").dim()
     );
     println!();
-}
-
-mod clean {
-    use crate::profile;
-    use console::style;
-    use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-
-    const SYSTEM_POLICY_PLIST: &str = "/Library/Preferences/org.mozilla.firefox.plist";
-    const SYSTEM_MANAGED_STORAGE: &str =
-        "/Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json";
-    const SUPPORT_DIR: &str = "/Library/Application Support/SensibleFox";
-    const SYSTEM_APP: &str = "/Applications/Firefox.app";
-
-    pub fn run() {
-        let profiles = profile::discover_profiles();
-        let user_home = profile::user_home().unwrap_or_default();
-        let user_policy = user_home.join("Library/Preferences/org.mozilla.firefox.plist");
-        let user_managed = user_home.join("Library/Application Support/Mozilla/ManagedStorage/uBlock0@raymondhill.net.json");
-        let user_app = user_home.join("Applications/Firefox.app");
-
-        let system_policy = Path::new(SYSTEM_POLICY_PLIST);
-        let system_managed = Path::new(SYSTEM_MANAGED_STORAGE);
-        let support_dir = Path::new(SUPPORT_DIR);
-        let system_app = Path::new(SYSTEM_APP);
-
-        let mut items: Vec<(String, PathBuf)> = Vec::new();
-        for p in &profiles {
-            items.push((format!("Profile: {}", p.display()), p.clone()));
-        }
-        if system_policy.exists() {
-            items.push((format!("System policy plist: {}", system_policy.display()), system_policy.into()));
-        }
-        if user_policy.exists() {
-            items.push((format!("User policy plist: {}", user_policy.display()), user_policy.into()));
-        }
-        if system_managed.exists() {
-            items.push((format!("System uBO managed storage: {}", system_managed.display()), system_managed.into()));
-        }
-        if user_managed.exists() {
-            items.push((format!("User uBO managed storage: {}", user_managed.display()), user_managed.into()));
-        }
-        if system_app.exists() {
-            items.push((format!("System Firefox app: {}", system_app.display()), system_app.into()));
-        }
-        if user_app.exists() {
-            items.push((format!("User Firefox app: {}", user_app.display()), user_app.into()));
-        }
-        if support_dir.exists() {
-            items.push((format!("Installer support files: {}", support_dir.display()), support_dir.into()));
-        }
-
-        if items.is_empty() {
-            println!("  {} Nothing to clean — no SensibleFox artifacts found", style("!").yellow());
-            return;
-        }
-
-        let labels: Vec<&str> = items.iter().map(|(l, _)| l.as_str()).collect();
-        let defaults: Vec<bool> = items.iter().map(|_| true).collect();
-        let picks = MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select items to delete (space to toggle, enter to confirm)")
-            .items(&labels)
-            .defaults(&defaults)
-            .interact()
-            .unwrap_or_default();
-
-        if picks.is_empty() {
-            println!("  Nothing selected.");
-            return;
-        }
-
-        let confirm = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!("Delete {} item(s)?", picks.len()))
-            .default(false)
-            .interact()
-            .unwrap_or(false);
-        if !confirm {
-            return;
-        }
-
-        let mut root_paths = Vec::new();
-        let mut user_paths = Vec::new();
-
-        for &i in &picks {
-            let path = &items[i].1;
-            let needs_root = path.starts_with("/Library") || path.starts_with("/Applications");
-            if profiles.contains(path) {
-                profile::unregister(path);
-            }
-            if needs_root && !super::is_root() {
-                root_paths.push(path);
-            } else {
-                user_paths.push(path);
-            }
-        }
-
-        for path in user_paths {
-            match remove_local_path(path) {
-                Ok(()) => println!("  {} {}", style("✓").green(), path.display()),
-                Err(e) => println!("  {} {}: {}", style("✗").red(), path.display(), e),
-            }
-        }
-
-        if !root_paths.is_empty() {
-            println!("  {} Deleting system files requires sudo. Please enter your password if prompted.", style("ℹ").cyan());
-            let mut cmd = Command::new("sudo");
-            cmd.arg("rm").arg("-rf");
-            for path in &root_paths {
-                cmd.arg(path);
-            }
-            match cmd.status() {
-                Ok(status) if status.success() => {
-                    for path in root_paths {
-                        println!("  {} {}", style("✓").green(), path.display());
-                    }
-                }
-                _ => {
-                    for path in root_paths {
-                        println!("  {} Failed to delete system file: {}", style("✗").red(), path.display());
-                    }
-                }
-            }
-        }
-    }
-
-    fn remove_local_path(path: &Path) -> Result<(), String> {
-        if !path.exists() {
-            return Ok(());
-        }
-        if path.is_dir() {
-            fs::remove_dir_all(path).map_err(|e| e.to_string())
-        } else {
-            fs::remove_file(path).map_err(|e| e.to_string())
-        }
-    }
-
-
 }

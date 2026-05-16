@@ -1,7 +1,6 @@
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Mutex;
 
 /// Weighted step in an install pipeline.
@@ -154,18 +153,12 @@ impl Progress {
 }
 
 fn write_status_file(path: &Path, step: &str, title: &str, detail: &str, progress: i64, total: i64) {
-    let mut content = String::new();
-    content.push_str(&format!("step={}\n", step));
-    content.push_str(&format!("title={}\n", title));
-    content.push_str(&format!("detail={}\n", detail));
-    content.push_str(&format!("progress={}\n", progress));
-    content.push_str(&format!("total={}\n", total));
-
-    let tmp = path.with_extension("tmp");
-    if std::fs::write(&tmp, content).is_ok() {
-        let _ = std::fs::rename(&tmp, path);
-        let _ = Command::new("chmod")
-            .args(["644", &path.to_string_lossy()])
-            .status();
-    }
+    // Write directly (not via temp+rename) so this works regardless of who
+    // originally created the file. The status file lives in /tmp which has
+    // a sticky bit; a non-owner rename across the sticky bit would fail.
+    // The applet tolerates partial reads — it just retries on the next poll.
+    let content = format!(
+        "step={step}\ntitle={title}\ndetail={detail}\nprogress={progress}\ntotal={total}\n"
+    );
+    let _ = std::fs::write(path, content);
 }

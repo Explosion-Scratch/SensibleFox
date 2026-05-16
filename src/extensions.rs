@@ -1,3 +1,4 @@
+use crate::paths::{self, BUNDLED_UBLOCK_XPI, UBLOCK_ID, UBLOCK_XPI_URL};
 use crate::progress::Progress;
 use console::style;
 use std::fs;
@@ -5,18 +6,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
-const UBLOCK_ID: &str = "uBlock0@raymondhill.net";
-
-const UBLOCK_XPI_URL: &str = concat!(
-    "https://addons.mozilla.org/firefox/downloads/latest/",
-    "ublock-origin/platform:3/ublock-origin.xpi"
-);
-
 const MAX_FETCH_RETRIES: u32 = 3;
-
-/// Optional path to a uBlock Origin XPI bundled inside the PKG.
-pub const BUNDLED_UBLOCK_XPI: &str =
-    "/Library/Application Support/SensibleFox/bundles/uBlock0@raymondhill.net.xpi";
 
 const UBLOCK_MANAGED_STORAGE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -160,7 +150,7 @@ pub fn write_ublock_managed_storage() {
         );
         return;
     };
-    let dir = home.join("Library/Application Support/Mozilla/ManagedStorage");
+    let dir = home.join(paths::MANAGED_STORAGE_DIR_REL);
     let path = dir.join(format!("{UBLOCK_ID}.json"));
 
     if let Err(e) = fs::create_dir_all(&dir) {
@@ -176,17 +166,6 @@ pub fn write_ublock_managed_storage() {
             "  {} Failed to write uBO managed storage: {e}",
             style("!").yellow()
         );
-        return;
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(actual) if actual == UBLOCK_MANAGED_STORAGE => {}
-        _ => {
-            eprintln!(
-                "  {} uBO managed storage verification failed",
-                style("!").yellow()
-            );
-        }
     }
 }
 

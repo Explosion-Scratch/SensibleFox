@@ -2,10 +2,6 @@
 /* Firefox Translucent Tabbar for macOS */
 /* ------------------------------------ */
 
-:root#main-window {
-  background-color: transparent !important;
-}
-
 :root:not(:-moz-window-inactive) #navigator-toolbox {
   background-color: transparent !important;
 }
