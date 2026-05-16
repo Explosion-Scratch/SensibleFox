@@ -211,6 +211,7 @@ fn run_install(cli: Cli) {
     }
 
     let profile_path = final_profile_path;
+    let updating_existing_profile = profile_path.exists();
     let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
     let steps = firefox::step_indexes();
 
@@ -275,6 +276,39 @@ fn run_install(cli: Cli) {
     progress.step(steps.profile, "Creating profile directory");
     if let Err(e) = profile::create(&profile_path) {
         fail(&progress, "Failed to create profile", &e);
+    }
+
+    if updating_existing_profile {
+        match prefs::strip_prefs_js_for_user_js_keys(&profile_path) {
+            Ok(0) => {}
+            Ok(n) if !progress.is_quiet() => println!(
+                "  {} Cleared {} stale prefs.js entries (will match new user.js)",
+                style("✓").green(),
+                n
+            ),
+            Ok(_) => {}
+            Err(e) if !progress.is_quiet() => eprintln!(
+                "  {} Could not trim prefs.js (close Firefox and retry): {}",
+                style("!").yellow(),
+                e
+            ),
+            Err(_) => {}
+        }
+        match css::remove_stale_css_modules(&profile_path) {
+            Ok(0) => {}
+            Ok(n) if !progress.is_quiet() => println!(
+                "  {} Removed {} obsolete chrome/css file(s)",
+                style("✓").green(),
+                n
+            ),
+            Ok(_) => {}
+            Err(e) if !progress.is_quiet() => eprintln!(
+                "  {} Could not remove stale CSS modules: {}",
+                style("!").yellow(),
+                e
+            ),
+            Err(_) => {}
+        }
     }
 
     progress.step(steps.prefs, "Writing user.js");

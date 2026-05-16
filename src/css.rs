@@ -1,4 +1,5 @@
 use console::style;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -32,6 +33,35 @@ const MODULES: &[(&str, &str)] = &[
         include_str!("../assets/context_menu_cleanup.css"),
     ),
 ];
+
+pub fn remove_stale_css_modules(profile_path: &Path) -> Result<usize, String> {
+    let allowed: HashSet<&str> = MODULES.iter().map(|(n, _)| *n).collect();
+    let css_dir = profile_path.join("chrome").join("css");
+    if !css_dir.is_dir() {
+        return Ok(0);
+    }
+    let mut removed = 0usize;
+    let entries =
+        fs::read_dir(&css_dir).map_err(|e| format!("failed to read chrome/css: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.ends_with(".css") {
+            continue;
+        }
+        if allowed.contains(name) {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|e| format!("failed to remove {}: {e}", path.display()))?;
+        removed += 1;
+    }
+    Ok(removed)
+}
 
 pub fn write(profile_path: &Path) -> Result<(), String> {
     let chrome_dir = profile_path.join("chrome");
