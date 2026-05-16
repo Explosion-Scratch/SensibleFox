@@ -126,7 +126,11 @@ stage_helper_app() {
 
 write_postinstall() {
     # $1 = scripts dir to write into.
+    # $2 = "yes" or "no" — whether to show the AppleScript progress applet.
+    #      Bundled/offline PKGs run quickly (no download) so the applet is
+    #      unnecessary and just flashes on screen.
     local scripts_dir="$1"
+    local show_applet="${2:-yes}"
     cat > "$scripts_dir/postinstall" <<POSTINSTALL
 #!/usr/bin/env bash
 set -euo pipefail
@@ -188,8 +192,10 @@ trap abort_install INT TERM HUP
 /usr/bin/pkill -x firefox 2>/dev/null || true
 /usr/bin/pkill -x Firefox 2>/dev/null || true
 
-# Show the AppleScript progress applet to the console user.
-if [ -n "\$CONSOLE_UID" ]; then
+# Show the AppleScript progress applet to the console user (online pkg only;
+# the bundled/offline pkg runs too quickly to need it).
+SHOW_APPLET="$show_applet"
+if [ "\$SHOW_APPLET" = "yes" ] && [ -n "\$CONSOLE_UID" ]; then
     /bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" /usr/bin/open "\$HELPER_APP" >/dev/null 2>&1 || true
 fi
 
@@ -217,12 +223,14 @@ SF_PID=
 
 printf 'step=done\ntitle=SensibleFox installed\ndetail=Firefox is ready to launch.\nprogress=100\ntotal=100\n' > "\$STATUS"
 
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    /usr/bin/pgrep -f "SensibleFox Installer" >/dev/null 2>&1 || break
-    /bin/sleep 0.2
-done
-/bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" \\
-    /usr/bin/osascript -e 'tell application id "com.sensiblefox.installer" to quit' >/dev/null 2>&1 || true
+if [ "\$SHOW_APPLET" = "yes" ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        /usr/bin/pgrep -f "SensibleFox Installer" >/dev/null 2>&1 || break
+        /bin/sleep 0.2
+    done
+    /bin/launchctl asuser "\$CONSOLE_UID" /usr/bin/sudo -u "\$CONSOLE_USER" \\
+        /usr/bin/osascript -e 'tell application id "com.sensiblefox.installer" to quit' >/dev/null 2>&1 || true
+fi
 
 exit 0
 POSTINSTALL
@@ -232,8 +240,10 @@ POSTINSTALL
 build_pkg() {
     # $1 = pkg root dir, $2 = scripts dir, $3 = resources dir,
     # $4 = identifier, $5 = output .pkg, $6 = welcome-version label
+    # $7 = show_applet ("yes" or "no") — forwarded to write_postinstall
     local pkg_root="$1" scripts_dir="$2" res_dir="$3"
     local identifier="$4" out_pkg="$5" version_label="$6"
+    local show_applet="${7:-yes}"
     local component dist_xml
     component="$DIST_DIR/component-$(basename "$out_pkg" .pkg).pkg"
     dist_xml="$DIST_DIR/Distribution-$(basename "$out_pkg" .pkg).xml"
@@ -247,7 +257,7 @@ build_pkg() {
 
     mkdir -p "$pkg_root$SUPPORT_DIR"
     stage_helper_app "$pkg_root$HELPER_APP_REL"
-    write_postinstall "$scripts_dir"
+    write_postinstall "$scripts_dir" "$show_applet"
 
     pkgbuild \
         --root "$pkg_root" \
@@ -293,7 +303,7 @@ ONLINE_RES="$DIST_DIR/pkg-resources"
 rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" "$DIST_DIR/SensibleFox.pkg"
 mkdir -p "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
 build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
-    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox.pkg" "$FF_VERSION"
+    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox.pkg" "$FF_VERSION" "yes"
 rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
 
 if [ -n "${NOTARYTOOL_PROFILE:-}" ]; then
@@ -340,7 +350,7 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
         "$UBLOCK_XPI_URL"
 
     build_pkg "$OFF_ROOT" "$OFF_SCRIPTS" "$OFF_RES" \
-        "${PKG_IDENTIFIER}.offline" "$OFF_PKG" "$FF_VERSION (bundled)"
+        "${PKG_IDENTIFIER}.offline" "$OFF_PKG" "$FF_VERSION (bundled)" "no"
 
     if [ -n "${NOTARYTOOL_PROFILE:-}" ] && [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
         echo "    → Notarizing offline .pkg..."

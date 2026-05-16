@@ -1,4 +1,5 @@
 mod css;
+mod extend;
 mod extensions;
 mod firefox;
 mod paths;
@@ -37,6 +38,15 @@ struct Cli {
     /// Reinstall Firefox even when a valid copy is already present
     #[arg(long)]
     replace_firefox: bool,
+
+    /// Extend from an existing Firefox profile. Pass a profile name, path,
+    /// or omit the value to auto-detect (uses the only profile, or prompts).
+    #[arg(long, num_args = 0..=1, default_missing_value = "")]
+    extend: Option<String>,
+
+    /// Comma-separated data to import: bookmarks,history,extensions,passwords,cookies
+    #[arg(long, default_value = "bookmarks,history,extensions,passwords")]
+    extend_selections: String,
 
     /// Custom Firefox.app install directory
     #[arg(long, hide = true)]
@@ -279,35 +289,25 @@ fn run_install(cli: Cli) {
     }
 
     if updating_existing_profile {
-        match prefs::strip_prefs_js_for_user_js_keys(&profile_path) {
-            Ok(0) => {}
-            Ok(n) if !progress.is_quiet() => println!(
-                "  {} Cleared {} stale prefs.js entries (will match new user.js)",
-                style("✓").green(),
-                n
-            ),
-            Ok(_) => {}
-            Err(e) if !progress.is_quiet() => eprintln!(
-                "  {} Could not trim prefs.js (close Firefox and retry): {}",
-                style("!").yellow(),
-                e
-            ),
-            Err(_) => {}
-        }
-        match css::remove_stale_css_modules(&profile_path) {
-            Ok(0) => {}
-            Ok(n) if !progress.is_quiet() => println!(
-                "  {} Removed {} obsolete chrome/css file(s)",
-                style("✓").green(),
-                n
-            ),
-            Ok(_) => {}
-            Err(e) if !progress.is_quiet() => eprintln!(
-                "  {} Could not remove stale CSS modules: {}",
-                style("!").yellow(),
-                e
-            ),
-            Err(_) => {}
+        clean_stale_profile_config(&profile_path, &progress);
+    }
+
+    if let Some(ref extend_value) = cli.extend {
+        let extend_source = match extend::resolve_extend_source(
+            if extend_value.is_empty() { None } else { Some(extend_value.as_str()) },
+            cli.unattended,
+        ) {
+            Ok(p) => p,
+            Err(e) => fail(&progress, "Failed to resolve extend source", &e),
+        };
+
+        let selections = match extend::parse_selections(&cli.extend_selections) {
+            Ok(s) => s,
+            Err(e) => fail(&progress, "Invalid extend-selections", &e),
+        };
+
+        if let Err(e) = extend::apply_extend(&extend_source, &profile_path, &selections) {
+            fail(&progress, "Failed to extend profile", &e);
         }
     }
 
@@ -349,6 +349,65 @@ fn run_install(cli: Cli) {
             firefox_path.display(),
             profile_path.display()
         );
+    }
+}
+
+/// Thoroughly clean stale configuration from an existing SensibleFox profile
+/// before re-applying fresh config. Ensures no old prefs/config leaks through.
+fn clean_stale_profile_config(profile_path: &Path, progress: &Progress) {
+    let quiet = progress.is_quiet();
+
+    let prefs_js = profile_path.join("prefs.js");
+    if prefs_js.exists() {
+        match prefs::strip_prefs_js_for_user_js_keys(profile_path) {
+            Ok(0) => {}
+            Ok(n) if !quiet => println!(
+                "  {} Cleared {} stale prefs.js entries (will match new user.js)",
+                style("✓").green(),
+                n
+            ),
+            Ok(_) => {}
+            Err(e) if !quiet => eprintln!(
+                "  {} Could not trim prefs.js (close Firefox and retry): {}",
+                style("!").yellow(),
+                e
+            ),
+            Err(_) => {}
+        }
+    }
+
+    match css::remove_stale_css_modules(profile_path) {
+        Ok(0) => {}
+        Ok(n) if !quiet => println!(
+            "  {} Removed {} obsolete chrome/css file(s)",
+            style("✓").green(),
+            n
+        ),
+        Ok(_) => {}
+        Err(e) if !quiet => eprintln!(
+            "  {} Could not remove stale CSS modules: {}",
+            style("!").yellow(),
+            e
+        ),
+        Err(_) => {}
+    }
+
+    let stale_files = [
+        "user-overrides.js",
+        "compatibility.ini",
+    ];
+    for filename in &stale_files {
+        let path = profile_path.join(filename);
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+            if !quiet {
+                println!(
+                    "  {} Removed stale {}",
+                    style("✓").green(),
+                    filename
+                );
+            }
+        }
     }
 }
 
