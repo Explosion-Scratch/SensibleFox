@@ -1,22 +1,76 @@
 /* Context menu cleanup — hide bloat items */
-#context-stripOnShareLink,
-#context-sendlinktodevice,
+
+/* Tab Context Menu */
+#context_openNewTabAtEnd,             /* New Tab to the Right */
+#context_shareTabURL,                  /* Share */
+menuitem.share-tab-url-item,           /* Share (alternative) */
+
+/* Frames Context Menu */
+#context-viewframeinfo,                /* View Frame Info */
+#context-saveframe,                    /* Save Frame As… */
+#context-bookmarkframe,                /* Bookmark This Frame */
+
+/* Inputs Context Menu */
+#context-bidi-text-direction-toggle,   /* Switch Text Direction */
+#context-bidi-page-direction-toggle,   /* Switch Page Direction */
+#fill-login,                           /* Fill Login */
+#fill-login-separator,                 /* Fill Login Separator */
+
+/* Images Context Menu */
+#context-sendimage,                    /* Email Image… */
+#context-setDesktopBackground,         /* Set As Desktop Background… */
+
+/* Links Context Menu */
+#context-openlinkprivate,              /* Open Link in New Private Window */
+#context-openlinkinusercontext-menu,   /* Open Link in New Container Tab */
+#context-stripOnShareLink,             /* Copy Link Without Site Tracking */
+#context-sendlinktodevice,             /* Send Link to Device */
+#context-searchselect,                 /* Search Google for … */
+#context-sep-sendlinktodevice,         /* Send Link to Device Separator */
+
+/* Main Hamburger Menu */
+#appMenu_help_reportSiteIssue,         /* Report Site Issue… */
+#appMenu_menu_HelpPopup_reportPhishingtoolmenu, /* Report Deceptive Site… */
+#appMenu_troubleShooting,              /* More Troubleshooting Information */
+#appMenu_helpSafeMode,                 /* Troubleshoot Mode… */
+#appMenu_feedbackPage,                 /* Submit Feedback… */
+#appMenu_aboutName,                    /* About Firefox */
+#appMenu_menu_openHelp,                /* Get Help */
+#appmenu-developer-tools-view > toolbarbutton[key="key_viewSource"] + toolbarbutton, /* Extensions for Developers */
+
+/* Main Menubar */
+#charsetMenu,                          /* Text Encoding */
+#help_reportSiteIssue,                 /* Report Site Issue… */
+#helpSafeMode,                         /* Troubleshoot Mode… */
+#feedbackPage,                         /* Submit Feedback… */
+#menu_openHelp,                        /* Get Help */
+#helpSwitchDevice,                     /* Switching to a New Device */
+#troubleShooting,                      /* More Troubleshooting Information */
+#helpPolicySupport,                    /* Policy Support */
+
+/* Media Context Menu */
+#context-sendvideo,                    /* Email Video… */
+#context-sendaudio,                    /* Email Audio… */
+
+/* Select Context Menu */
+#context-inspect-a11y,                 /* Inspect Accessibility Properties */
+
+/* URLbar Context Menu */
+#urlbar menuitem[anonid="paste-and-go"],   /* Paste and Go */
+#urlbar menuitem[id="strip-on-share"],     /* Copy Without Site Tracking */
+
+/* Other Bloat Items */
 #context-translate-selection,
 #frame-sep,
-#context-sep-sendlinktodevice,
 #context-print-selection,
 #context-take-screenshot,
 #context-sep-screenshots,
 #context-sep-selectall,
 #context-copy-link-to-highlight,
 #context-copy-clean-link-to-highlight,
-#context-inspect-a11y,
-#context-sendvideo,
 #context-bookmarklink,
 #context-viewpartialsource-selection,
 #context-searchselect-private,
-#context-sendimage,
-#context-setDesktopBackground,
 #context-sep-setbackground,
 #context-bookmarkpage,
 #spell-separator,
@@ -29,3 +83,4 @@
 #alltabs-button {
   display: none !important;
 }
+
