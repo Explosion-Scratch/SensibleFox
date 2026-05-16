@@ -129,8 +129,13 @@ write_postinstall() {
     # $2 = "yes" or "no" — whether to show the AppleScript progress applet.
     #      Bundled/offline PKGs run quickly (no download) so the applet is
     #      unnecessary and just flashes on screen.
+    # $3 = "yes" or "no" — whether to pass --replace-firefox. Online PKGs
+    #      always replace Firefox so the user gets the latest version on
+    #      every install/upgrade. Offline PKGs skip this since the payload
+    #      already staged the correct version via pkgbuild.
     local scripts_dir="$1"
     local show_applet="${2:-yes}"
+    local replace_firefox="${3:-yes}"
     cat > "$scripts_dir/postinstall" <<POSTINSTALL
 #!/usr/bin/env bash
 set -euo pipefail
@@ -201,7 +206,14 @@ fi
 
 # Phase 1 (root): install Firefox + write /Library policies. Run in the
 # background so we keep a PID for Stop (SIGTERM) to terminate mid-download.
-"\$SCRIPTS_DIR/sensiblefox" --system-only --unattended --status-file "\$STATUS" &
+# REPLACE_FF is baked at build time: online PKGs replace Firefox to get the
+# latest version; offline PKGs keep the payload-staged copy.
+REPLACE_FF="$replace_firefox"
+PHASE1_ARGS="--system-only --unattended --status-file \$STATUS"
+if [ "\$REPLACE_FF" = "yes" ]; then
+    PHASE1_ARGS="\$PHASE1_ARGS --replace-firefox"
+fi
+"\$SCRIPTS_DIR/sensiblefox" \$PHASE1_ARGS &
 SF_PID=\$!
 wait \$SF_PID
 SF_PID=
@@ -241,9 +253,11 @@ build_pkg() {
     # $1 = pkg root dir, $2 = scripts dir, $3 = resources dir,
     # $4 = identifier, $5 = output .pkg, $6 = welcome-version label
     # $7 = show_applet ("yes" or "no") — forwarded to write_postinstall
+    # $8 = replace_firefox ("yes" or "no") — forwarded to write_postinstall
     local pkg_root="$1" scripts_dir="$2" res_dir="$3"
     local identifier="$4" out_pkg="$5" version_label="$6"
     local show_applet="${7:-yes}"
+    local replace_firefox="${8:-yes}"
     local component dist_xml
     component="$DIST_DIR/component-$(basename "$out_pkg" .pkg).pkg"
     dist_xml="$DIST_DIR/Distribution-$(basename "$out_pkg" .pkg).xml"
@@ -257,7 +271,7 @@ build_pkg() {
 
     mkdir -p "$pkg_root$SUPPORT_DIR"
     stage_helper_app "$pkg_root$HELPER_APP_REL"
-    write_postinstall "$scripts_dir" "$show_applet"
+    write_postinstall "$scripts_dir" "$show_applet" "$replace_firefox"
 
     pkgbuild \
         --root "$pkg_root" \
@@ -306,18 +320,18 @@ mkdir -p "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
 # Build universal pkg
 SENSIBLEFOX_CLI="$DIST_DIR/sensiblefox-universal"
 build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
-    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-universal.pkg" "$FF_VERSION" "yes"
+    "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-universal.pkg" "$FF_VERSION" "yes" "yes"
 
 # Build aarch64 pkg
 if [ "${SENSIBLEFOX_NATIVE_ONLY:-0}" != "1" ]; then
     SENSIBLEFOX_CLI="$BIN_ARM"
     build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
-        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-aarch64.pkg" "$FF_VERSION" "yes"
+        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-aarch64.pkg" "$FF_VERSION" "yes" "yes"
 
     # Build x86_64 pkg
     SENSIBLEFOX_CLI="$BIN_X64"
     build_pkg "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES" \
-        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-x86_64.pkg" "$FF_VERSION" "yes"
+        "$PKG_IDENTIFIER" "$DIST_DIR/SensibleFox-x86_64.pkg" "$FF_VERSION" "yes" "yes"
 fi
 
 rm -rf "$ONLINE_ROOT" "$ONLINE_SCRIPTS" "$ONLINE_RES"
@@ -374,7 +388,7 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
         "$UBLOCK_XPI_URL"
 
     build_pkg "$OFF_ROOT" "$OFF_SCRIPTS" "$OFF_RES" \
-        "${PKG_IDENTIFIER}.offline" "$OFF_PKG" "$FF_VERSION (bundled)" "no"
+        "${PKG_IDENTIFIER}.offline" "$OFF_PKG" "$FF_VERSION (bundled)" "no" "no"
 
     if [ -n "${NOTARYTOOL_PROFILE:-}" ] && [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
         echo "    → Notarizing offline .pkg..."

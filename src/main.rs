@@ -209,11 +209,7 @@ fn run_install(mut cli: Cli) {
     if cli.profile_path.is_none() && !cli.system_only {
         let existing = profile::discover_profiles();
         if !existing.is_empty() {
-            if cli.unattended {
-                if default_path.exists() {
-                    final_profile_path = next_unused_profile(&default_path);
-                }
-            } else if cli.status_file.is_none() {
+            if !cli.unattended && cli.status_file.is_none() {
                 let (chosen, launch_only, is_new) = prompt_existing_profile(&existing, &default_path);
                 final_profile_path = chosen;
                 just_launch = launch_only;

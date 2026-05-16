@@ -163,7 +163,7 @@ fn install(target: &InstallTarget, progress: &Progress) -> Result<(), String> {
     // into place (or it's already at /Applications — nothing to do).
     if Path::new(BUNDLED_FIREFOX_APP).exists() {
         progress.step(steps.download, "Using bundled Firefox.app");
-        return copy_app(BUNDLED_FIREFOX_APP, target, progress);
+        return copy_app(Path::new(BUNDLED_FIREFOX_APP), target, progress);
     }
 
     // Bundled DMG path (legacy): mount and copy.
@@ -183,10 +183,10 @@ fn install(target: &InstallTarget, progress: &Progress) -> Result<(), String> {
     let mount_dir = tmp_dir.path().join("mount");
     std::fs::create_dir(&mount_dir).map_err(|e| format!("mkdir mount: {e}"))?;
     let mount = DmgMount::attach(&dmg_path, &mount_dir)?;
-    copy_app(&mount.src_app(), target, progress)
+    copy_app(Path::new(&mount.src_app()), target, progress)
 }
 
-fn copy_app(src_app: &str, target: &InstallTarget, progress: &Progress) -> Result<(), String> {
+fn copy_app(src_app: &Path, target: &InstallTarget, progress: &Progress) -> Result<(), String> {
     let dest = target.app_path();
 
     if dest.exists() {
@@ -212,7 +212,8 @@ fn copy_app(src_app: &str, target: &InstallTarget, progress: &Progress) -> Resul
     if !status.success() || !dest.join("Contents/MacOS/firefox").exists() {
         progress.fail("SensibleFox", "Failed to copy Firefox.app");
         return Err(format!(
-            "ditto failed to copy {src_app} -> {}. Install manually: brew install --cask firefox",
+            "ditto failed to copy {} -> {}. Install manually: brew install --cask firefox",
+            src_app.display(),
             dest.display()
         ));
     }

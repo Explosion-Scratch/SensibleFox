@@ -103,7 +103,7 @@ pub fn discover_firefox_profiles() -> Vec<(String, PathBuf)> {
         if line.starts_with('[') && line.ends_with(']') {
             if let (Some(name), Some(path)) = (current_name.take(), current_path.take()) {
                 let resolved = resolve_profile_path(&root, &path, is_relative.unwrap_or(true));
-                if resolved.exists() {
+                if resolved.exists() && !crate::profile::is_sensiblefox_profile(&resolved) {
                     results.push((name, resolved));
                 }
             }
@@ -123,7 +123,7 @@ pub fn discover_firefox_profiles() -> Vec<(String, PathBuf)> {
     }
     if let (Some(name), Some(path)) = (current_name, current_path) {
         let resolved = resolve_profile_path(&root, &path, is_relative.unwrap_or(true));
-        if resolved.exists() {
+        if resolved.exists() && !crate::profile::is_sensiblefox_profile(&resolved) {
             results.push((name, resolved));
         }
     }
@@ -141,7 +141,7 @@ fn discover_profiles_by_scan(root: &Path) -> Vec<(String, PathBuf)> {
     if let Ok(rd) = fs::read_dir(&profiles_dir) {
         for entry in rd.flatten() {
             let p = entry.path();
-            if p.is_dir() {
+            if p.is_dir() && !crate::profile::is_sensiblefox_profile(&p) {
                 let name = p
                     .file_name()
                     .unwrap_or_default()
