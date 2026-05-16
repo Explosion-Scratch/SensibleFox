@@ -218,7 +218,6 @@ user_pref("browser.theme.dark-private-windows", false);
 user_pref("browser.privateWindowSeparation.enabled", false);
 user_pref("layout.css.prefers-color-scheme.content-override", 2);
 user_pref("layout.css.backdrop-filter.enabled", true);
-user_pref("browser.tabs.allow_transparent_browser", true);
 
 // ═══════════════════════════════════════════
 // PERFORMANCE — GPU acceleration, modern codecs
@@ -416,10 +415,11 @@ user_pref("browser.search.context.loadInBackground", true);
 // ═══════════════════════════════════════════
 // DOWNLOADS — sensible handling
 // ═══════════════════════════════════════════
-user_pref("browser.download.always_ask_before_handling_new_types", true);
+user_pref("browser.download.always_ask_before_handling_new_types", false);
 user_pref("browser.download.manager.addToRecentDocs", false);
 user_pref("browser.download.autohideButton", true);
 user_pref("browser.download.alwaysOpenPanel", false);
+user_pref("browser.download.manager.showWhenStarting", false);
 user_pref("browser.download.open_pdf_attachments_inline", true);
 user_pref("browser.download.useDownloadDir", true);
 

@@ -7,7 +7,7 @@
 // ║    • arkenfox/user.js (reference, not merged directly)                 ║
 // ║    • sensiblefox overrides — passwords, DNS, devtools, macOS, etc.     ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
-// Generated: 2026-05-16 10:36:11
+// Generated: 2026-05-16 10:53:03
 
 
 // ═══════════════════════════════════════════
@@ -2878,7 +2878,6 @@ user_pref("browser.theme.dark-private-windows", false);
 user_pref("browser.privateWindowSeparation.enabled", false);
 user_pref("layout.css.prefers-color-scheme.content-override", 2);
 user_pref("layout.css.backdrop-filter.enabled", true);
-user_pref("browser.tabs.allow_transparent_browser", true);
 
 // ═══════════════════════════════════════════
 // PERFORMANCE — GPU acceleration, modern codecs

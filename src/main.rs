@@ -150,7 +150,7 @@ fn main() {
     run_install(cli);
 }
 
-fn run_install(cli: Cli) {
+fn run_install(mut cli: Cli) {
     let install_target = if let Some(ref custom) = cli.app_dir {
         firefox::InstallTarget::Custom(custom.join("Firefox.app"))
     } else if cli.user {
@@ -204,6 +204,7 @@ fn run_install(cli: Cli) {
     let default_path = profile::default_profile_path();
     let mut final_profile_path = cli.profile_path.clone().unwrap_or_else(|| default_path.clone());
     let mut just_launch = false;
+    let mut interactive_create = false;
 
     if cli.profile_path.is_none() && !cli.system_only {
         let existing = profile::discover_profiles();
@@ -213,9 +214,31 @@ fn run_install(cli: Cli) {
                     final_profile_path = next_unused_profile(&default_path);
                 }
             } else if cli.status_file.is_none() {
-                let (chosen, launch_only) = prompt_existing_profile(&existing, &default_path);
+                let (chosen, launch_only, is_new) = prompt_existing_profile(&existing, &default_path);
                 final_profile_path = chosen;
                 just_launch = launch_only;
+                interactive_create = is_new;
+            }
+        } else if cli.status_file.is_none() && !cli.unattended {
+            interactive_create = true;
+        }
+    }
+
+    if interactive_create && cli.extend.is_none() {
+        let extend_profiles = extend::discover_firefox_profiles();
+        if !extend_profiles.is_empty() {
+            use dialoguer::Confirm;
+            let do_extend = Confirm::new()
+                .with_prompt("Would you like to import data (bookmarks, history, passwords) from an existing Firefox profile?")
+                .default(true)
+                .interact()
+                .unwrap_or(false);
+            
+            if do_extend {
+                cli.extend = Some("".to_string());
+                if let Ok(selections) = extend::prompt_selections() {
+                    cli.extend_selections = selections.iter().map(|s| s.label()).collect::<Vec<_>>().join(",");
+                }
             }
         }
     }
@@ -422,7 +445,7 @@ fn next_unused_profile(default: &Path) -> PathBuf {
     }
 }
 
-fn prompt_existing_profile(existing: &[PathBuf], default: &Path) -> (PathBuf, bool) {
+fn prompt_existing_profile(existing: &[PathBuf], default: &Path) -> (PathBuf, bool, bool) {
     use dialoguer::{theme::ColorfulTheme, Select};
     let mut items = vec![
         "Launch existing profile".to_string(),
@@ -441,9 +464,9 @@ fn prompt_existing_profile(existing: &[PathBuf], default: &Path) -> (PathBuf, bo
         .interact()
         .unwrap_or(0);
     match selection {
-        0 => (existing[0].clone(), true),
-        1 => (next_unused_profile(default), false),
-        i => (existing[i - 2].clone(), false),
+        0 => (existing[0].clone(), true, false),
+        1 => (next_unused_profile(default), false, true),
+        i => (existing[i - 2].clone(), false, false),
     }
 }
 

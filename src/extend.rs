@@ -103,7 +103,7 @@ pub fn discover_firefox_profiles() -> Vec<(String, PathBuf)> {
         if line.starts_with('[') && line.ends_with(']') {
             if let (Some(name), Some(path)) = (current_name.take(), current_path.take()) {
                 let resolved = resolve_profile_path(&root, &path, is_relative.unwrap_or(true));
-                if resolved.exists() && !crate::profile::is_sensiblefox_profile(&resolved) {
+                if resolved.exists() {
                     results.push((name, resolved));
                 }
             }
@@ -123,7 +123,7 @@ pub fn discover_firefox_profiles() -> Vec<(String, PathBuf)> {
     }
     if let (Some(name), Some(path)) = (current_name, current_path) {
         let resolved = resolve_profile_path(&root, &path, is_relative.unwrap_or(true));
-        if resolved.exists() && !crate::profile::is_sensiblefox_profile(&resolved) {
+        if resolved.exists() {
             results.push((name, resolved));
         }
     }
@@ -141,7 +141,7 @@ fn discover_profiles_by_scan(root: &Path) -> Vec<(String, PathBuf)> {
     if let Ok(rd) = fs::read_dir(&profiles_dir) {
         for entry in rd.flatten() {
             let p = entry.path();
-            if p.is_dir() && !crate::profile::is_sensiblefox_profile(&p) {
+            if p.is_dir() {
                 let name = p
                     .file_name()
                     .unwrap_or_default()
@@ -253,6 +253,40 @@ fn prompt_extend_source(profiles: &[(String, PathBuf)]) -> Result<PathBuf, Strin
         .map_err(|e| format!("selection failed: {e}"))?;
 
     Ok(profiles[selection].1.clone())
+}
+
+/// Prompt interactively for what data to extend.
+pub fn prompt_selections() -> Result<Vec<ExtendSelection>, String> {
+    use dialoguer::{theme::ColorfulTheme, MultiSelect};
+
+    let items = vec![
+        ("Bookmarks", ExtendSelection::Bookmarks, true),
+        ("History", ExtendSelection::History, true),
+        ("Passwords", ExtendSelection::Passwords, true),
+        ("Extensions", ExtendSelection::Extensions, true),
+        ("Cookies", ExtendSelection::Cookies, false),
+    ];
+
+    let labels: Vec<&str> = items.iter().map(|(l, _, _)| *l).collect();
+    let defaults: Vec<bool> = items.iter().map(|(_, _, d)| *d).collect();
+
+    let selections = MultiSelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select data to import (Space to toggle, Enter to confirm)")
+        .items(&labels)
+        .defaults(&defaults)
+        .interact()
+        .map_err(|e| format!("selection failed: {e}"))?;
+
+    let mut out = Vec::new();
+    for idx in selections {
+        out.push(items[idx].1);
+    }
+    
+    if out.is_empty() {
+        return Err("no data selected to extend".into());
+    }
+
+    Ok(out)
 }
 
 /// Copy selected data from `source_profile` into `dest_profile`.
