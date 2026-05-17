@@ -115,8 +115,7 @@ fn fetch_with_retry(client: &reqwest::blocking::Client, url: &str) -> Result<Str
 fn merge_upstream(dir: &Path) {
     let mut merged = String::new();
     merged.push_str("// sensiblefox — upstream prefs (auto-generated)\n");
-    merged.push_str("// Pulled from Betterfox + arkenfox. Do not edit.\n");
-    merged.push_str(&format!("// Generated: {}\n\n", chrono_like_now()));
+    merged.push_str("// Pulled from Betterfox + arkenfox. Do not edit.\n\n");
 
     let files = [
         "betterfox-fastfox.js",
@@ -146,12 +145,4 @@ fn upstream_dir() -> PathBuf {
     manifest_dir.join("generated")
 }
 
-fn chrono_like_now() -> String {
-    let output = std::process::Command::new("date")
-        .arg("+%Y-%m-%d %H:%M:%S")
-        .output();
-    match output {
-        Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        Err(_) => "unknown".to_string(),
-    }
-}
+
