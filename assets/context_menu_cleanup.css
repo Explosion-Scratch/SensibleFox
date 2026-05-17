@@ -25,7 +25,7 @@ menuitem.share-tab-url-item,           /* Share (alternative) */
 #context-openlinkinusercontext-menu,   /* Open Link in New Container Tab */
 #context-stripOnShareLink,             /* Copy Link Without Site Tracking */
 #context-sendlinktodevice,             /* Send Link to Device */
-#context-searchselect,                 /* Search Google for … */
+/* #context-searchselect,                 Search Google for … */
 #context-sep-sendlinktodevice,         /* Send Link to Device Separator */
 
 /* Main Hamburger Menu */
@@ -56,7 +56,7 @@ menuitem.share-tab-url-item,           /* Share (alternative) */
 #context-inspect-a11y,                 /* Inspect Accessibility Properties */
 
 /* URLbar Context Menu */
-#urlbar menuitem[anonid="paste-and-go"],   /* Paste and Go */
+/* #urlbar menuitem[anonid="paste-and-go"],   Paste and Go */
 #urlbar menuitem[id="strip-on-share"],     /* Copy Without Site Tracking */
 
 /* Other Bloat Items */

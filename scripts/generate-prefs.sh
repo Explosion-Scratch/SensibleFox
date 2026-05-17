@@ -44,11 +44,6 @@ cat > "$OUT_DIR/user.js" << 'HEADER'
 // ╚══════════════════════════════════════════════════════════════════════════╝
 HEADER
 
-{
-    echo "// Generated: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo ""
-} >> "$OUT_DIR/user.js"
-
 # ──────────────────────────────────────────────
 # SECTION 1: Betterfox upstream
 # ──────────────────────────────────────────────
@@ -531,7 +526,6 @@ user_pref("browser.aboutConfig.showWarning", false);
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("browser.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("svg.context-properties.content.enabled", true);
-user_pref("browser.uiCustomization.state", "{\"placements\":{\"widget-overflow-fixed-list\":[],\"unified-extensions-area\":[],\"nav-bar\":[\"back-button\",\"forward-button\",\"stop-reload-button\",\"customizableui-special-spring1\",\"urlbar-container\",\"customizableui-special-spring2\",\"downloads-button\",\"unified-extensions-button\",\"ublock0_raymondhill_net-browser-action\"],\"TabsToolbar\":[\"tabbrowser-tabs\",\"new-tab-button\",\"alltabs-button\"],\"PersonalToolbar\":[\"personal-bookmarks\"]},\"seen\":[\"save-to-pocket-button\",\"developer-button\",\"ublock0_raymondhill_net-browser-action\"],\"dirtyAreaCache\":[\"nav-bar\",\"PersonalToolbar\",\"TabsToolbar\"],\"currentVersion\":20,\"newElementCount\":2}");
 SENSIBLEFOX
 
 echo ""
