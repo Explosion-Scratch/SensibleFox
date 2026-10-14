@@ -1,0 +1,81 @@
+{
+  "policies": {
+    "SkipTermsOfUse": true,
+    "DisableTelemetry": true,
+    "DisableFeedbackCommands": true,
+    "DisablePocket": true,
+    "DontCheckDefaultBrowser": true,
+    "DisableAppUpdate": true,
+    "FirefoxHome": {
+      "Search": true,
+      "TopSites": false,
+      "SponsoredTopSites": false,
+      "Highlights": false,
+      "Pocket": false,
+      "SponsoredPocket": false,
+      "Snippets": false,
+      "Locked": false
+    },
+    "FirefoxSuggest": {
+      "WebSuggestions": false,
+      "SponsoredSuggestions": false,
+      "ImproveSuggest": false,
+      "Locked": false
+    },
+    "SearchEngines": {
+      "Default": "Google",
+      "Remove": ["Bing", "Amazon.com", "DuckDuckGo", "eBay", "Wikipedia (en)"]
+    },
+    "UserMessaging": {
+      "WhatsNew": false,
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "SkipOnboarding": true,
+      "MoreFromMozilla": false,
+      "Locked": false
+    },
+    "DNSOverHTTPS": {
+      "Enabled": true,
+      "ProviderURL": "https://dns.quad9.net/dns-query",
+      "Locked": false
+    },
+    "EnableTrackingProtection": {
+      "Value": true,
+      "Cryptomining": true,
+      "Fingerprinting": true,
+      "EmailTracking": true,
+      "Locked": false
+    },
+    "Cookies": {
+      "Behavior": "reject-tracker-and-partition-foreign",
+      "BehaviorPrivateBrowsing": "reject-tracker-and-partition-foreign",
+      "Locked": false
+    },
+    "ExtensionSettings": {
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "normal_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi",
+        "default_area": "navbar",
+        "private_browsing": true
+      }
+    },
+    "Preferences": {
+      "network.prefetch-next": true,
+      "network.dns.disablePrefetch": false,
+      "network.dns.disablePrefetchFromHTTPS": false,
+      "network.predictor.enabled": true,
+      "network.predictor.enable-prefetch": true,
+      "network.preconnect": true,
+      "network.http.speculative-parallel-limit": 10,
+      "network.http.response.timeout": 0,
+      "browser.nova.enabled": false,
+      "browser.aboutaddons.novaThemesPickerEnabled": false,
+      "browser.newtabpage.activity-stream.nova.enabled": false,
+      "browser.urlbar.quicksuggest.ampTopPickUseNovaIconSize": false,
+      "pdfjs.enableNova": false,
+      "browser.urlbar.speculativeConnect.enabled": true,
+      "browser.places.speculativeConnect.enabled": true
+    }
+  }
+}

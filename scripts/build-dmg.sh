@@ -57,6 +57,13 @@ echo ""
 [ -f "$GEN_DIR/user.js" ]                    || { echo "  ✗ generated/user.js missing. Run ./scripts/generate-prefs.sh"; exit 1; }
 [ -f "$GEN_DIR/sensiblefox-defaults.js" ]    || { echo "  ✗ generated/sensiblefox-defaults.js missing. Run ./scripts/generate-prefs.sh"; exit 1; }
 [ -f "$ASSETS_DIR/policies.json" ]           || { echo "  ✗ assets/policies.json missing."; exit 1; }
+# NOTE: the DMG ships policies-dmg.json (= policies.json + DisableAppUpdate).
+# Mozilla self-update would overwrite our branded Info.plist and silently
+# un-brand the app (updater.cpp: complete updates remove every precomplete-
+# listed file, and Info.plist ships in every MAR). So the branded app must
+# never self-update; ESR point releases arrive via a rebuilt DMG / reinstall.
+# The PKG/CLI path installs stock Firefox and keeps self-update enabled.
+[ -f "$ASSETS_DIR/policies-dmg.json" ]       || { echo "  ✗ assets/policies-dmg.json missing."; exit 1; }
 [ -f "$ASSETS_DIR/autoconfig.js" ]           || { echo "  ✗ assets/autoconfig.js missing."; exit 1; }
 [ -f "$ASSETS_DIR/sensiblefox.cfg.tail" ]    || { echo "  ✗ assets/sensiblefox.cfg.tail missing."; exit 1; }
 
@@ -147,7 +154,7 @@ echo "    ${#CSS_MODULES[@]} CSS modules + userChrome.css"
 echo "  → Patching: enterprise policies..."
 DISTRIBUTION="$RESOURCES/distribution"
 mkdir -p "$DISTRIBUTION"
-cp "$ASSETS_DIR/policies.json" "$DISTRIBUTION/policies.json"
+cp "$ASSETS_DIR/policies-dmg.json" "$DISTRIBUTION/policies.json"
 
 # ── Patch: uBlock managed storage (distribution/) ────────────────────────
 echo "  → Patching: uBlock managed storage..."

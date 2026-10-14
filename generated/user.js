@@ -2792,15 +2792,6 @@ user_pref("browser.crashReports.unsubmittedCheck.autoSubmit2", false);
 user_pref("browser.crashReports.unsubmittedCheck.enabled", false);
 
 // ═══════════════════════════════════════════
-// UPDATES — always track latest ESR
-// The ESR base is what keeps unsandboxed autoconfig working; a stale or
-// rapid-channel install defeats it. The CLI replaces non-current installs
-// (see src/firefox.rs ESR freshness check) and the in-place updater covers
-// the rest — never disable it here or via a DisableAppUpdate policy.
-// ═══════════════════════════════════════════
-user_pref("app.update.auto", true);
-
-// ═══════════════════════════════════════════
 // PASSWORD MANAGER — disabled (use a real one)
 // ═══════════════════════════════════════════
 user_pref("signon.rememberSignons", false);
