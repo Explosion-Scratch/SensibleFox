@@ -31,3 +31,48 @@
     Components.utils.reportError("sensiblefox autoconfig failed: " + e);
   }
 })();
+
+// ════════════════════════════════════════════════════════════════════════
+// sensiblefox autoconfig — Ctrl/Cmd+Shift+A searches tabs (Chromium-style)
+// Replaces the Add-ons Manager shortcut: opens the tab-overview search when
+// available, falling back to the address bar's tab filter ("% ").
+// (adapted from https://gist.github.com/radiantly/f18ea1fd06d8dd328b6ae64b6fa7cb36;
+//  metaKey added so macOS Cmd+Shift+A works alongside Ctrl+Shift+A)
+// ════════════════════════════════════════════════════════════════════════
+try {
+  Services.obs.addObserver(function (win) {
+    win.addEventListener(
+      "keydown",
+      function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyA") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (win.gTabsPanel && win.gTabsPanel.searchTabs) {
+            win.gTabsPanel.searchTabs();
+          } else if (win.gURLBar) {
+            win.gURLBar.search("% ");
+          }
+        }
+      },
+      true
+    );
+  }, "browser-delayed-startup-finished");
+} catch (ex) {
+  Cu.reportError(ex);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// sensiblefox autoconfig — locked UI buttons (sandbox-safe lockPref)
+// These match features SensibleFox removes (password manager, pinned
+// startup page): the buttons render greyed-out instead of dead. Cert,
+// cookie, and download management stay accessible on purpose.
+// NOTE: lockPref (not defaultPref) is what actually disables the button —
+// and unlike the privileged JS above, lockPref works inside the release-
+// channel autoconfig sandbox, so this block is live in the shipped app.
+// ════════════════════════════════════════════════════════════════════════
+lockPref("pref.privacy.disable_button.view_passwords", true);
+lockPref("pref.privacy.disable_button.view_passwords_exceptions", true);
+lockPref("pref.general.disable_button.default_browser", true);
+lockPref("pref.browser.homepage.disable_button.current_page", true);
+lockPref("pref.browser.homepage.disable_button.bookmark_page", true);
+lockPref("pref.browser.homepage.disable_button.restore_default", true);

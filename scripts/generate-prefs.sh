@@ -98,6 +98,9 @@ user_pref("browser.contentblocking.database.enabled", false);
 user_pref("browser.contentblocking.cfr-milestone.enabled", false);
 user_pref("default-browser-agent.enabled", false);
 user_pref("dom.private-attribution.submission.enabled", false);
+user_pref("toolkit.telemetry.dap_enabled", false);
+user_pref("browser.search.serpEventTelemetryCategorization.enabled", false);
+user_pref("messaging-system.rsexperimentloader.enabled", false);
 user_pref("datareporting.policy.dataSubmissionPolicyAcceptedVersion", 2);
 user_pref("toolkit.telemetry.prompted", 2);
 
@@ -109,7 +112,8 @@ user_pref("services.sync.enabled", false);
 user_pref("webextensions.storage.sync.enabled", false);
 
 // ═══════════════════════════════════════════
-// STUDIES & EXPERIMENTS — disabled
+// STUDIES & EXPERIMENTS — off by default, user may re-enable
+// (no enterprise lock: DisableFirefoxStudies policy intentionally absent)
 // ═══════════════════════════════════════════
 user_pref("app.shield.optoutstudies.enabled", false);
 user_pref("app.normandy.enabled", false);
@@ -187,11 +191,16 @@ user_pref("extensions.pocket.site", " ");
 user_pref("extensions.pocket.showHome", false);
 
 // ═══════════════════════════════════════════
-// DNS OVER HTTPS — Quad9
+// DNS OVER HTTPS — Quad9 (unlocked: user may change provider)
 // ═══════════════════════════════════════════
 user_pref("network.trr.custom_uri", "https://dns.quad9.net/dns-query");
 user_pref("network.trr.mode", 2);
 user_pref("network.trr.uri", "https://dns.quad9.net/dns-query");
+user_pref("network.trr.bootstrapAddr", "9.9.9.9");
+user_pref("network.trr.request-timeout", 1500);
+user_pref("network.trr.early-AAAA", true);
+user_pref("network.trr.disable-ECS", true);
+user_pref("network.dns.echconfig.enabled", true);
 
 // ═══════════════════════════════════════════
 // DEVTOOLS — docked right, ready to use
@@ -273,7 +282,13 @@ user_pref("network.dns.max_high_priority_threads", 40);
 user_pref("network.dns.max_any_priority_threads", 24);
 user_pref("browser.cache.disk.max_chunks_memory_usage", 40960);
 user_pref("browser.cache.disk.max_priority_chunks_memory_usage", 40960);
-user_pref("browser.cache.disk.preload_chunk_count", 4);
+user_pref("browser.cache.disk.preload_chunk_count", 8);
+user_pref("javascript.options.baselinejit.threshold", 50);
+user_pref("browser.display.auto_quality_min_font_size", 0);
+user_pref("content.switch.threshold", 300000);
+user_pref("network.http.pacing.requests.min-parallelism", 12);
+user_pref("network.http.pacing.requests.burst", 20);
+user_pref("browser.sessionstore.max_tabs_undo", 10);
 user_pref("browser.cache.frecency_half_life_hours", 6);
 user_pref("browser.cache.check_doc_frequency", 3);
 user_pref("image.mem.shared.unmap.min_expiration_ms", 120000);
@@ -282,8 +297,8 @@ user_pref("dom.iframe_lazy_loading.enabled", true);
 // ═══════════════════════════════════════════
 // SPEED POLICY — tunable goals (override locally if you want a different tradeoff)
 // ═══════════════════════════════════════════
-// Keep history forever:
-//   • places.history.expiration.max_pages → high cap (below); alternatively lower for less SQLite work
+// Keep history capped (100k pages) for fast startup/awesomebar on old
+// profiles; INT_MAX pins everything forever at SQLite cost.
 // Prefer RAM over disk:
 //   • Large browser.cache.memory.capacity; keep disk cache on for revisits, or set
 //     browser.cache.disk.enable false to minimize disk (hurts cold/offline repeat loads)
@@ -303,7 +318,7 @@ user_pref("dom.iframe_lazy_loading.enabled", true);
 // Speculative networking (more background DNS/connects; snappier perceived loads):
 //   • network.predictor*, prefetch-next, dns prefetch on, urlbar speculative connect
 //
-user_pref("places.history.expiration.max_pages", 2147483647);
+user_pref("places.history.expiration.max_pages", 100000);
 user_pref("browser.cache.memory.capacity", 262144);
 user_pref("browser.cache.disk.smart_size.enabled", false);
 user_pref("browser.cache.disk.capacity", 1048576);
@@ -383,7 +398,6 @@ user_pref("browser.tabs.tabmanager.enabled", false);
 // ═══════════════════════════════════════════
 user_pref("browser.translations.select.enable", false);
 user_pref("dom.text_fragments.enabled", false);
-user_pref("privacy.query_stripping.strip_on_share.enabled", false);
 user_pref("devtools.accessibility.enabled", false);
 user_pref("browser.ml.chat.menu", false);
 user_pref("browser.ml.linkPreview.enabled", false);
@@ -391,6 +405,17 @@ user_pref("dom.text-recognition.enabled", false);
 user_pref("browser.search.visualSearch.featureGate", false);
 user_pref("widget.macos.native-context-menus", false);
 user_pref("browser.search.separatePrivateDefault.ui.enabled", false);
+
+// ═══════════════════════════════════════════
+// AI / ML — off (no global toggle exists; each surface disabled separately)
+// Translations stay on: on-device, privacy-preserving.
+// ═══════════════════════════════════════════
+user_pref("browser.ml.enable", false);
+user_pref("browser.ml.chat.enabled", false);
+user_pref("browser.ml.chat.shortcuts", false);
+user_pref("browser.tabs.groups.smart.enabled", false);
+user_pref("browser.tabs.groups.smart.userEnabled", false);
+user_pref("extensions.ml.enabled", false);
 
 // ═══════════════════════════════════════════
 // TAB & UX BEHAVIOR — sensible defaults
@@ -416,7 +441,10 @@ user_pref("screenshots.browser.component.enabled", false);
 user_pref("browser.search.context.loadInBackground", true);
 
 // ═══════════════════════════════════════════
-// DOWNLOADS — sensible handling
+// DOWNLOADS — sensible handling + resumable big downloads
+// network.http.response.timeout 300s (default since FF28) aborts slow
+// downloads and breaks resume; 0 disables the timeout so the server's
+// Range support actually gets used instead of a stale .part being ignored.
 // ═══════════════════════════════════════════
 user_pref("browser.download.always_ask_before_handling_new_types", false);
 user_pref("browser.download.manager.addToRecentDocs", false);
@@ -425,6 +453,20 @@ user_pref("browser.download.alwaysOpenPanel", false);
 user_pref("browser.download.manager.showWhenStarting", false);
 user_pref("browser.download.open_pdf_attachments_inline", true);
 user_pref("browser.download.useDownloadDir", true);
+user_pref("network.http.response.timeout", 0);
+
+// ═══════════════════════════════════════════
+// UI — pre-Nova (pre-157) look
+// Nova rounds every corner to match macOS Tahoe; disabling it restores
+// the classic squarer chrome. browser.nova.enabled is the master switch,
+// plus each per-surface toggle so no Nova styling leaks through if the
+// master switch ever stops covering a surface.
+// ═══════════════════════════════════════════
+user_pref("browser.nova.enabled", false);
+user_pref("browser.aboutaddons.novaThemesPickerEnabled", false);
+user_pref("browser.newtabpage.activity-stream.nova.enabled", false);
+user_pref("browser.urlbar.quicksuggest.ampTopPickUseNovaIconSize", false);
+user_pref("pdfjs.enableNova", false);
 
 // ═══════════════════════════════════════════
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
@@ -489,8 +531,19 @@ user_pref("privacy.globalprivacycontrol.functionality.enabled", true);
 user_pref("privacy.globalprivacycontrol.pbmode.enabled", true);
 user_pref("privacy.donottrackheader.enabled", true);
 user_pref("privacy.fingerprintingProtection", true);
+user_pref("privacy.fingerprintingProtection.remoteOverrides.enabled", false);
 user_pref("privacy.query_stripping.enabled", true);
 user_pref("privacy.query_stripping.enabled.pbmode", true);
+user_pref("privacy.query_stripping.strip_on_share.enabled", true);
+user_pref("privacy.bounceTrackingProtection.mode", 1);
+
+// ═══════════════════════════════════════════
+// WEBRTC — keep calling working, trim IP leaks
+// (full media.peerconnection.enabled=false breaks Meet/Calls; these two
+// only suppress host-candidate exposure)
+// ═══════════════════════════════════════════
+user_pref("media.peerconnection.ice.proxy_only_if_behind_proxy", true);
+user_pref("media.peerconnection.ice.default_address_only", true);
 
 // ═══════════════════════════════════════════
 // WARNING BYPASS — keep safety nets, but never block the user
@@ -501,6 +554,7 @@ user_pref("browser.safebrowsing.malware.enabled", true);
 user_pref("browser.safebrowsing.phishing.enabled", true);
 user_pref("browser.safebrowsing.blockedURIs.enabled", true);
 user_pref("browser.safebrowsing.downloads.enabled", true);
+user_pref("browser.safebrowsing.downloads.remote.enabled", false);
 user_pref("security.warn_entering_weak", false);
 user_pref("security.warn_entering_weak.show_once", false);
 user_pref("security.warn_leaving_secure", false);

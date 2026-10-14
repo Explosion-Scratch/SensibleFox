@@ -58,12 +58,48 @@ done
 
 command -v gh >/dev/null 2>&1 || die "gh not found — install GitHub CLI and run: gh auth login"
 
-if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
-    gh release upload "$TAG" "${ASSETS[@]}" --clobber
-    printf '%s\n' "Uploaded assets to existing release $TAG"
-else
-    gh release create "$TAG" "${ASSETS[@]}" \
-        --title "$TAG" \
-        --generate-notes
-    printf '%s\n' "Created release $TAG with ${#ASSETS[@]} assets"
+# Retrieve auth token for curl uploads
+token=$(gh auth token 2>/dev/null || true)
+[[ -n "$token" ]] || die "gh CLI not authenticated — please run: gh auth login"
+
+# Ensure the release exists (create it without files if it doesn't)
+if ! gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+    printf 'Creating release %s...\n' "$TAG"
+    gh release create "$TAG" --title "$TAG" --generate-notes
 fi
+
+# Retrieve release upload URL template
+upload_url_template=$(gh release view "$TAG" --json uploadUrl --jq '.uploadUrl' 2>/dev/null || true)
+[[ -n "$upload_url_template" ]] || die "Could not retrieve upload URL for release $TAG"
+
+# Strip trailing {?name,label} template
+upload_url="${upload_url_template%\{*\}}"
+
+printf 'Uploading %d assets to release %s...\n\n' "${#ASSETS[@]}" "$TAG"
+
+for asset in "${ASSETS[@]}"; do
+    asset_name="$(basename "$asset")"
+    size=$(du -h "$asset" | cut -f1 | tr -d ' ')
+    
+    printf 'Uploading %s (%s)...\n' "$asset_name" "$size"
+    
+    # Delete existing asset if it exists (clobber)
+    gh release delete-asset "$TAG" "$asset_name" -y >/dev/null 2>&1 || true
+    
+    # Stream the upload with a progress bar
+    if ! curl -f -L \
+        -X POST \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/octet-stream" \
+        --progress-bar \
+        -T "$asset" \
+        "${upload_url}?name=${asset_name}" \
+        -o /dev/null; then
+        die "Failed to upload $asset_name"
+    fi
+    
+    printf 'Successfully uploaded %s\n\n' "$asset_name"
+done
+
+printf 'Created/updated release %s with %d assets!\n' "$TAG" "${#ASSETS[@]}"
+

@@ -19,7 +19,7 @@
  * Fastfox                                                                              *
  * "Non ducor duco"                                                                     *
  * priority: speedy browsing                                                            *
- * version: 150                                                                         *
+ * version: 154                                                                         *
  * url: https://github.com/yokoffing/Betterfox                                          *
  ***************************************************************************************/
 
@@ -42,7 +42,7 @@
 // Increases font cache size to improve performance on text-heavy websites.
 // Especially beneficial for sites with many font faces or complex typography.
 // [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1239151#c2
-//user_pref("gfx.content.skia-font-cache-size", 32); // 32 MB; default=5; Chrome=20
+defaultPref("gfx.content.skia-font-cache-size", 20); // 20 MB; default=5; Chrome=20
 
 // PREF: page reflow timer
 // Rather than wait until a page has completely downloaded to display it to the user,
@@ -69,16 +69,11 @@
 // [1] https://searchfox.org/mozilla-central/rev/c1180ea13e73eb985a49b15c0d90e977a1aa919c/modules/libpref/init/StaticPrefList.yaml#1824-1834
 // [2] https://web.archive.org/web/20240115073722/https://dev.opera.com/articles/efficient-javascript/?page=3#reflow
 // [3] https://web.archive.org/web/20240115073722/https://dev.opera.com/articles/efficient-javascript/?page=3#smoothspeed
-//user_pref("content.notify.interval", 100000); // (.10s); default=120000 (.12s)
-//user_pref("content.max.tokenizing.time", 1000000); // (1.00s); alt=2000000; HIDDEN
-//user_pref("content.interrupt.parsing", true); // HIDDEN
+    //user_pref("content.max.tokenizing.time", 1000000); // (1.00s); alt=2000000; HIDDEN
+    //user_pref("content.interrupt.parsing", true); // HIDDEN
 
 // PREF: UI responsiveness threshold
 //user_pref("content.switch.threshold", 300000); // HIDDEN; default= 750000; alt=500000
-
-// PREF: split text nodes to a length
-// The number of bytes in a text node.
-//user_pref("content.maxtextrun", 8191); // DEFAULT; HIDDEN
 
 // PREF: new tab preload
 // [WARNING] Disabling this may cause a delay when opening a new tab in Firefox.
@@ -106,18 +101,6 @@
 // PREF: disable preSkeletonUI on startup [WINDOWS]
 //user_pref("browser.startup.preXulSkeletonUI", false);
 
-// PREF: lazy load iframes
-//user_pref("dom.iframe_lazy_loading.enabled", true); // DEFAULT [FF121+]
-
-// PREF: Prioritized Task Scheduling API 
-// [1] https://github.com/yokoffing/Betterfox/issues/355
-// [2] https://blog.mozilla.org/performance/2022/06/02/prioritized-task-scheduling-api-is-prototyped-in-nightly/
-// [3] https://medium.com/airbnb-engineering/building-a-faster-web-experience-with-the-posttask-scheduler-276b83454e91
-// [4] https://github.com/WICG/scheduling-apis/blob/main/explainers/prioritized-post-task.md
-// [5] https://wicg.github.io/scheduling-apis/
-// [6] https://caniuse.com/mdn-api_taskcontroller
-//user_pref("dom.enable_web_task_scheduling", true); // DEFAULT [FF142+]
-
 /****************************************************************************
  * SECTION: GFX RENDERING TWEAKS                                            *
 ****************************************************************************/
@@ -137,9 +120,9 @@
 // [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1945683
 // [2] https://www.reddit.com/r/firefox/comments/1p58qre/firefox_is_getting_ready_to_make_youtube_fast/
 // [3] https://www.ghacks.net/2025/11/24/these-two-tweaks-should-improve-firefoxs-performance-on-youtube-significantly/
-//user_pref("gfx.webrender.layer-compositor", true);
-    // If your PC uses an AMD GPU, you might want to make a second change.
-    // This one improves CPU usage on AMD systems.
+//user_pref("gfx.webrender.layer-compositor", true); // [DEFAULT FF152]
+
+// PREF: improve CPU usage on AMD systems
 //user_pref("media.wmf.zero-copy-nv12-textures-force-enabled", true);
 
 // PREF: if your hardware doesn't support Webrender, you can fallback to Webrender's software renderer
@@ -157,79 +140,71 @@
 // [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1741501
 // [2] https://github.com/yokoffing/Betterfox/issues/153
 // [3] https://github.com/yokoffing/Betterfox/issues/198
+// [4] https://github.com/yokoffing/Betterfox/issues/460#issuecomment-3983660306
 //user_pref("gfx.canvas.accelerated", true); // [DEFAULT FF133+]
-    //user_pref("gfx.canvas.accelerated.cache-items", 4096); // [default=8192 FF135+]; Chrome=4096
-    //user_pref("gfx.canvas.accelerated.cache-size", 512); // default=256; Chrome=512
-    //user_pref("gfx.canvas.max-size", 32767); // DEFAULT=32767
+    //user_pref("gfx.canvas.accelerated.cache-items", 8192); // [DEFAULT FF135+]
+    //user_pref("gfx.canvas.max-size", 65535); // [DEFAULT FF152]
 
-// PREF: WebGL
-//user_pref("webgl.max-size", 16384); // default=1024
-//user_pref("webgl.force-enabled", true);
+/****************************************************************************
+ * SECTION: JAVASCRIPT OPTIONS                                              *
+****************************************************************************/
+// PREF: lower the Baseline JIT compilation threshold
+// Controls how many times a function runs before Firefox promotes it from the
+// C++ interpreter to the Baseline JIT compiler. The Baseline JIT compiles each
+// bytecode instruction into a small piece of machine code and uses Inline Caches
+// (ICs) to both speed up execution and collect type info for the Ion optimizing JIT.
+// Lowering this from 100 to 50 promotes "warm" functions to compiled machine code
+// sooner, which reduces dropped frames while browsing.
+// [1] https://ra1ahq.blog/en/optimizaciya-proizvoditelnosti-mozilla-firefox-chast-1
+//user_pref("javascript.options.baselinejit.threshold", 50); // default=100
 
-// PREF: prefer GPU over CPU
-// At best, the prefs do nothing on Linux/macOS.
-// At worst, it'll result in crashes if the sandboxing is a WIP.
-// [1] https://firefox-source-docs.mozilla.org/dom/ipc/process_model.html#gpu-process
-//user_pref("layers.gpu-process.enabled", true); // DEFAULT WINDOWS
-    //user_pref("layers.gpu-process.force-enabled", true); // enforce
-    //user_pref("layers.mlgpu.enabled", true); // LINUX
-//user_pref("media.hardware-video-decoding.enabled", true); // DEFAULT WINDOWS macOS
-    //user_pref("media.hardware-video-decoding.force-enabled", true); // enforce
-//user_pref("media.gpu-process-decoder", true); // DEFAULT WINDOWS
-//user_pref("media.ffmpeg.vaapi.enabled", true); // LINUX
+// PREF: raise the IonMonkey (Ion) optimizing-JIT compilation threshold
+// Controls how many times a function runs before Firefox promotes it from the
+// Baseline JIT to IonMonkey, the optimizing JIT. Ion applies advanced compiler
+// optimizations to produce fast code for "hot" functions, at the cost of slower
+// compilation. The Baseline JIT is quicker to produce but can't cope with the large
+// amounts of code on heavy websites.
+// Raising this threshold keeps more code on the faster-to-compile Baseline JIT,
+// reserving the expensive Ion compilation for only the hottest functions.
+// [1] https://ra1ahq.blog/en/optimizaciya-proizvoditelnosti-mozilla-firefox-chast-1
+//user_pref("javascript.options.ion.threshold", 1500); // DEFAULT
 
-// PREF: hardware and software decoded video overlay [FF116+]
-// [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1829063
-// [2] https://phabricator.services.mozilla.com/D175993
-//user_pref("gfx.webrender.dcomp-video-hw-overlay-win", true); // DEFAULT
-    //user_pref("gfx.webrender.dcomp-video-hw-overlay-win-force-enabled", true); // enforce
-//user_pref("gfx.webrender.dcomp-video-sw-overlay-win", true); // DEFAULT
-    //user_pref("gfx.webrender.dcomp-video-sw-overlay-win-force-enabled", true); // enforce
+// PREF: decrease concurrent JavaScript garbage collection (GC) threads
+// Sets the divisor in the formula: GC threads = CPU threads ÷ divisor (min 1).
+// A LOWER value = MORE parallel GC threads. A HIGHER value = FEWER threads.
+// Example (24-thread CPU):  divisor 1 → 24 threads | 2 → 12 | 4 (default) → 6 | 12 → 2
+// Power users with many cores should LOWER this value, not raise it.
+// [NOTE] Mozilla's default of 4 is conservative to avoid thread contention on weak hardware.
+//user_pref("javascript.options.concurrent_multiprocess_gcs.cpu_divisor", 4); // DEFAULT
 
 /****************************************************************************
  * SECTION: DISK CACHE                                                     *
 ****************************************************************************/
 
+// PREF: force a fixed max cache size on disk
+// NOTE: You need this set to false if you are to edit the disk capacity value
+// [1] https://support.mozilla.org/en-US/questions/1271481
+//user_pref("browser.cache.disk.smart_size.enabled", false);
+
 // PREF: disk cache size
 // [1] https://bugzilla.mozilla.org/buglist.cgi?bug_id=913808,968106,968101
 // [2] https://rockridge.hatenablog.com/entry/2014/09/15/165501
 // [3] https://www.reddit.com/r/firefox/comments/17oqhw3/firefox_and_ssd_disk_consumption/
-//user_pref("browser.cache.disk.smart_size.enabled", false); // force a fixed max cache size on disk
 //user_pref("browser.cache.disk.capacity", 512000); // default=256000; size of disk cache; 1024000=1GB, 2048000=2GB
 //user_pref("browser.cache.disk.max_entry_size", 51200); // DEFAULT (50 MB); maximum size of an object in disk cache
-
-// PREF: Race Cache With Network (RCWN) [FF59+]
-// [ABOUT] about:networking#rcwn
-// Firefox concurrently sends requests for cached resources to both the
-// local disk cache and the network server. The browser uses whichever
-// result arrives first and cancels the other request. This approach sometimes
-// loads pages faster because the network can be quicker than accessing the cache
-// on a hard drive. When RCWN is enabled, the request might be served from
-// the server even if you have valid entry in the cache. Set to false if your
-// intention is to increase cache usage and reduce network usage.
-// [1] https://slides.com/valentingosu/race-cache-with-network-2017
-// [2] https://simonhearne.com/2020/network-faster-than-cache/
-// [3] https://support.mozilla.org/en-US/questions/1267945
-// [4] https://askubuntu.com/questions/1214862/36-syns-in-a-row-how-to-limit-firefox-connections-to-one-website
-// [5] https://bugzilla.mozilla.org/show_bug.cgi?id=1622859
-// [6] https://soylentnews.org/comments.pl?noupdate=1&sid=40195&page=1&cid=1067867#commentwrap
-//user_pref("network.http.rcwn.enabled", false);
-
-// PREF: attempt to RCWN only if a resource is smaller than this size
-//user_pref("network.http.rcwn.small_resource_size_kb", 256); // DEFAULT
 
 // PREF: cache memory pool
 // Cache v2 provides a memory pool that stores metadata (such as response headers)
 // for recently read cache entries [1]. It is managed by a cache thread, and caches with
 // metadata in the pool appear to be reused immediately.
 // [1] https://bugzilla.mozilla.org/buglist.cgi?bug_id=986179
-//user_pref("browser.cache.disk.metadata_memory_limit", 16384); // default=250 (0.25 MB); limit of recent metadata we keep in memory for faster access
+//user_pref("browser.cache.disk.metadata_memory_limit", 1024); // DEFAULT (1 MB); limit of recent metadata we keep in memory for faster access
 
 // PREF: number of chunks we preload ahead of read
 // Large content such as images will load faster.
 // [1] https://bugzilla.mozilla.org/buglist.cgi?bug_id=913819,988318
 // [2] http://www.janbambas.cz/new-firefox-http-cache-enabled/
-//user_pref("browser.cache.disk.preload_chunk_count", 4); // DEFAULT
+//user_pref("browser.cache.disk.preload_chunk_count", 8); // default=4
 
 // PREF: the time period used to re-compute the frecency value of cache entries
 // The frequency algorithm is used to select entries, and entries that are recently
@@ -278,9 +253,9 @@
 //user_pref("browser.cache.jsbc_compression_level", 3);
 
 // PREF: strategy to use for when the bytecode should be encoded and saved [TESTING ONLY]
-// -1 makes page load times marginally longer when a page is being loaded for the first time, while
+// -1 = makes page load times marginally longer when a page is being loaded for the first time, while
 // subsequent reload of websites will be much much faster.
-// 0 means that the bytecode is created every 4 page loads [3].
+// 0 = the bytecode is created every 4 page loads [3].
 // [1] https://searchfox.org/mozilla-release/source/modules/libpref/init/StaticPrefList.yaml#3461-3488
 // [2] https://www.reddit.com/r/firefox/comments/12786yv/improving_performance_in_firefox_android_part_ii/
 // [3] https://github.com/zen-browser/desktop/issues/217
@@ -304,8 +279,8 @@
 // [1] https://kb.mozillazine.org/Browser.cache.memory.capacity#-1
 // [2] https://searchfox.org/mozilla-central/source/netwerk/cache2/CacheObserver.cpp#94-125
 // [3] https://github.com/WaterfoxCo/Waterfox/commit/3fed16932c80a2f6b37d126fe10aed66c7f1c214
-//user_pref("browser.cache.memory.capacity", 131072); // 128 MB RAM cache; alt=65536 (65 MB RAM cache); default=32768
-//user_pref("browser.cache.memory.max_entry_size", 20480); // 20 MB max entry; default=5120 (5 MB)
+//user_pref("browser.cache.memory.capacity", 65536); // default=32768 (32 MB)
+    //user_pref("browser.cache.memory.max_entry_size", 10240); // default=5120 (5 MB)
 
 // PREF: amount of Back/Forward cached pages stored in memory for each tab
 // Pages that were recently visited are stored in memory in such a way
@@ -316,7 +291,7 @@
 // is no reason for Firefox to keep memory for this.
 // -1=determine automatically (8 pages)
 // [1] https://kb.mozillazine.org/Browser.sessionhistory.max_total_viewers#Possible_values_and_their_effects
-//user_pref("browser.sessionhistory.max_total_viewers", 4); // default=8
+//user_pref("browser.sessionhistory.max_total_viewers", -1); // DEFAULT
 //user_pref("browser.sessionstore.max_tabs_undo", 10); // default=25
     //user_pref("browser.sessionstore.max_entries", 10); // [HIDDEN OR REMOVED]
     //user_pref("dom.storage.default_quota", 20480); // 20MB; default=5120
@@ -346,18 +321,15 @@
 //user_pref("media.mediasource.enabled", true); // DEFAULT
 
 // PREF: adjust video buffering periods when not using MSE (in seconds)
-// [NOTE] Does not affect videos over 720p since they use DASH playback [1]
+// [NOTE] Does not affect videos over 720p since they use DASH playback [1] or Web Audio API
 // [1] https://lifehacker.com/preload-entire-youtube-videos-by-disabling-dash-playbac-1186454034
-//user_pref("media.cache_readahead_limit", 600); // 10 min; default=60; stop reading ahead when our buffered data is this many seconds ahead of the current playback
-//user_pref("media.cache_resume_threshold", 300); // 5 min; default=30; when a network connection is suspended, don't resume it until the amount of buffered data falls below this threshold
 
 /****************************************************************************
  * SECTION: IMAGE CACHE                                                     *
 ****************************************************************************/
 
 // PREF: image cache
-//user_pref("image.cache.size", 10485760); // (cache images up to 10MiB in size) [DEFAULT 5242880]
-//user_pref("image.mem.decode_bytes_at_a_time", 65536); // default=16384; alt=32768; chunk size for calls to the image decoders
+//user_pref("image.cache.size", 20971520); // (cache images up to 20 MiB in size) [DEFAULT]
 //user_pref("image.mem.max_decoded_image_kb", 512000); // 500MB [HIDDEN OR REMOVED?]
 
 // PREF: set minimum timeout to unmap shared surfaces since they have been last used
@@ -378,18 +350,12 @@
 // [1] https://www.mail-archive.com/support-seamonkey@lists.mozilla.org/msg74561.html
 // [2] https://github.com/yokoffing/Betterfox/issues/279
 // [3] https://ra1ahq.blog/en/optimizaciya-proizvoditelnosti-mozilla-firefox
-//user_pref("network.buffer.cache.size", 65535); // default=32768 (32 kb); 262144 too large
-//user_pref("network.buffer.cache.count", 48); // default=24; 128 too large
 
 // PREF: increase the absolute number of HTTP connections
 // [1] https://kb.mozillazine.org/Network.http.max-connections
 // [2] https://kb.mozillazine.org/Network.http.max-persistent-connections-per-server
 // [3] https://www.reddit.com/r/firefox/comments/11m2yuh/how_do_i_make_firefox_use_more_of_my_900_megabit/jbfmru6/
-//user_pref("network.http.max-connections", 1800); // default=900
-//user_pref("network.http.max-persistent-connections-per-server", 10); // default=6; download connections; anything above 10 is excessive
-    //user_pref("network.http.max-urgent-start-excessive-connections-per-host", 5); // default=3
-    //user_pref("network.http.max-persistent-connections-per-proxy", 48); // default=32
-//user_pref("network.http.request.max-start-delay", 5); // default=10
+    //user_pref("network.http.max-persistent-connections-per-proxy", 32); // default=32
 //user_pref("network.websocket.max-connections", 200); // DEFAULT
 
 // PREF: pacing requests [FF23+]
@@ -402,17 +368,16 @@
 // false = Firefox will send as many requests as possible without pacing
 // true = Firefox will pace requests (default)
 //user_pref("network.http.pacing.requests.enabled", false);
-    //user_pref("network.http.pacing.requests.min-parallelism", 10); // default=6
-    //user_pref("network.http.pacing.requests.burst", 32); // default=10
+    //user_pref("network.http.pacing.requests.min-parallelism", 12); // default=6
+    //user_pref("network.http.pacing.requests.burst", 20); // default=10
 
 // PREF: increase DNS cache
 // [1] https://developer.mozilla.org/en-US/docs/Web/Performance/Understanding_latency
-//user_pref("network.dnsCacheEntries", 10000); // default=800
+//user_pref("network.dnsCacheEntries", 1600); // [DEFAULT FF152]
 
 // PREF: adjust DNS expiration time
 // [ABOUT] about:networking#dns
 // [NOTE] These prefs will be ignored by DNS resolver if using DoH/TRR.
-//user_pref("network.dnsCacheExpiration", 3600); // keep entries for 1 hour; default=60
     //user_pref("network.dnsCacheExpirationGracePeriod", 120); // default=60; cache DNS entries for 2 minutes after they expire
 
 // PREF: the number of threads for DNS
@@ -420,16 +385,7 @@
 //user_pref("network.dns.max_any_priority_threads", 24); // DEFAULT [FF 123?]
 
 // PREF: increase TLS token caching 
-//user_pref("network.ssl_tokens_cache_capacity", 10240); // default=2048; more TLS token caching (fast reconnects)
-
-/****************************************************************************
- * SECTION: EXPERIMENTAL                                                    *
-****************************************************************************/
-
-// PREF: CSS Masonry Layout [NIGHTLY]
-// [1] https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Grid_Layout/Masonry_Layout
-// [2] https://www.smashingmagazine.com/native-css-masonry-layout-css-grid/
-//user_pref("layout.css.grid-template-masonry-value.enabled", true);
+//user_pref("network.ssl_tokens_cache_capacity", 8192); // TLS token caching (fast reconnects) [DEFAULT FF152]
 
 /****************************************************************************
  * SECTION: TAB UNLOAD                                                      *
@@ -457,7 +413,7 @@
 // and use this percent value (out of 100) to determine if Firefox is in a
 // low memory scenario.
 // [1] https://dev.to/msugakov/taking-firefox-memory-usage-under-control-on-linux-4b02
-//user_pref("browser.low_commit_space_threshold_percent", 20); // default=5; LINUX
+//user_pref("browser.low_commit_space_threshold_percent", 5); // default=5; LINUX
 
 // PREF: determine how long (in ms) tabs are inactive before they unload
 // 60000=1min; 300000=5min; 600000=10min (default)
@@ -521,7 +477,7 @@
  * Securefox                                                                *
  * "Natura non contristatur"                                                *     
  * priority: provide sensible security and privacy                          *
- * version: 150                                                             *
+ * version: 154                                                             *
  * url: https://github.com/yokoffing/Betterfox                              *
  * credit: Most prefs are reproduced and adapted from the arkenfox project  *
  * credit urL: https://github.com/arkenfox/user.js                          *
@@ -563,15 +519,20 @@
 // Opener and redirect heuristics are granted for 30 days, see [3]
 // [1] https://blog.mozilla.org/security/2021/07/13/smartblock-v2/
 // [2] https://hg.mozilla.org/mozilla-central/rev/e5483fd469ab#l4.12
-// [3] https://developer.mozilla.org/docs/Web/Privacy/State_Partitioning#storage_access_heuristics
-    // user_pref("privacy.antitracking.enableWebcompat", false);
+// [3] https://developer.mozilla.org/docs/Web/Privacy/Guides/State_Partitioning#storage_access_heuristics
+//user_pref("privacy.antitracking.enableWebcompat", false);
+    //user_pref("privacy.restrict3rdpartystorage.heuristic.navigation", false);
+    //user_pref("privacy.restrict3rdpartystorage.heuristic.opened_window_after_interaction", false);
+        //user_pref("privacy.restrict3rdpartystorage.heuristic.recently_visited", false); // DEFAULT
+        //user_pref("privacy.restrict3rdpartystorage.heuristic.redirect", false); // DEFAULT
+        //user_pref("privacy.restrict3rdpartystorage.heuristic.window_open", false); // DEFAULT
 
 // PREF: set ETP Strict/Custom exception lists (FF141+)
 // [SETTING] Options>Privacy & Security>Enhanced Tracking Protection>Strict/Custom>Fix major [baseline] | minor [convenience]
 // [1] https://support.mozilla.org/en-US/kb/manage-enhanced-tracking-protection-exceptions
 // [2] https://etp-exceptions.mozilla.org/
-// user_pref("privacy.trackingprotection.allow_list.baseline.enabled", true); // [DEFAULT: true]
-// user_pref("privacy.trackingprotection.allow_list.convenience.enabled", true); // [DEFAULT: true]
+//user_pref("privacy.trackingprotection.allow_list.baseline.enabled", true); // [DEFAULT: true]
+//user_pref("privacy.trackingprotection.allow_list.convenience.enabled", true); // [DEFAULT: true]
 
 // PREF: query stripping
 // Currently uses a small list [1]
@@ -640,7 +601,7 @@
 // [7] https://hacks.mozilla.org/2022/02/improving-the-storage-access-api-in-firefox/
 // [8] https://blog.includesecurity.com/2025/04/cross-site-websocket-hijacking-exploitation-in-2025/
 //user_pref("network.cookie.cookieBehavior", 5); // DEFAULT FF103+
-//user_pref("network.cookie.cookieBehavior.optInPartitioning", true); // [ETP FF132+]
+//user_pref("network.cookie.cookieBehavior.optInPartitioning", false); // DEFAULT [ETP FF132-137]
 //user_pref("browser.contentblocking.reject-and-isolate-cookies.preferences.ui.enabled", true); // DEFAULT
 
 // PREF: Network Partitioning
@@ -653,7 +614,6 @@
 // [3] https://blog.mozilla.org/security/2021/01/26/supercookie-protections/
 //user_pref("privacy.partition.network_state", true); // DEFAULT
     //user_pref("privacy.partition.serviceWorkers", true); // [DEFAULT: true FF105+]
-    //user_pref("privacy.partition.network_state.ocsp_cache", true); // [DEFAULT: true FF123+]
     //user_pref("privacy.partition.bloburl_per_partition_key", true); // [FF118+]
 // enable APS (Always Partitioning Storage) [FF104+]
 //user_pref("privacy.partition.always_partition_third_party_non_cookie_storage", true); // [DEFAULT: true FF109+]
@@ -1015,8 +975,8 @@ defaultPref("media.memory_cache_max_size", 65536); // 64 MB; default=8192; AF=65
    //user_pref("privacy.cpd.siteSettings", false);
    //user_pref("privacy.clearHistory.siteSettings", false);
 
-// PREF: purge session icon in Private Browsing windows
-defaultPref("browser.privatebrowsing.resetPBM.enabled", true);
+// PREF: purge session icon in Private Browsing windows [FF152+]
+//user_pref("browser.privatebrowsing.resetPBM.enabled", true); // [DEFAULT FF152+]
 
 // PREF: delete files downloaded in Private Browsing when all private windows are closed
 // When downloading a file in private browsing mode, the user will be prompted
@@ -1572,6 +1532,9 @@ defaultPref("editor.truncate_user_pastes", false);
 // [1] https://bugzilla.mozilla.org/buglist.cgi?bug_id=1695693,1719301
 //user_pref("network.http.windows-sso.enabled", false); // DEFAULT
 
+// PREF: disable passkeys
+//user_pref("security.webauth.webauthn", false);
+
 // PREF: enforce no direct attestation in passkeys [FF144+]
 // [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1981587 ***/
 //user_pref("security.webauthn.always_allow_direct_attestation", false); // [DEFAULT: false]
@@ -1682,15 +1645,15 @@ defaultPref("extensions.enabledScopes", 5); // [HIDDEN PREF]
  * SECTION: CONTAINERS                                                       *
 ******************************************************************************/
 
-// PREF: enable Container Tabs and its UI setting [FF50+]
+// PREF: Container Tabs [FF50+]
 // [NOTE] No longer a privacy benefit due to Firefox upgrades (see State Partitioning and Network Partitioning)
 // Useful if you want to login to the same site under different accounts
 // You also may want to download Multi-Account Containers for extra options (2)
 // [SETTING] General>Tabs>Enable Container Tabs
 // [1] https://wiki.mozilla.org/Security/Contextual_Identity_Project/Containers
 // [2] https://addons.mozilla.org/en-US/firefox/addon/multi-account-containers/
-defaultPref("privacy.userContext.ui.enabled", true);
-//user_pref("privacy.userContext.enabled", true);
+//user_pref("privacy.userContext.ui.enabled", true); [DEFAULT FF153+]
+//user_pref("privacy.userContext.enabled", true); [DEFAULT FF153+]
 
 // PREF: set behavior on "+ Tab" button to display container menu on left click [FF74+]
 // [NOTE] The menu is always shown on long press and right click.
@@ -1849,6 +1812,31 @@ defaultPref("privacy.userContext.ui.enabled", true);
 //user_pref("pdfjs.disabled", false); // [DEFAULT: false]
 defaultPref("pdfjs.enableScripting", false); // [FF86+]
 
+// PREF: mitigate FROST attack
+// [1] https://github.com/yokoffing/Betterfox/issues/486
+//user_pref("dom.fs.enabled", false);
+//user_pref("dom.fs.writable_file_stream.enabled", false);
+
+// PREF: disable BITS (Background Intelligent Transfer Service) for updates [WINDOWS]
+// BITS is a Windows service that downloads files in the background using idle
+// network capacity. Firefox uses BITS to fetch updates, but two known bugs
+// make this option risky on Windows.
+// Firefox can flood the BITS job queue until it hits the default limit of 60
+// jobs, and once that happens, BITS stops working correctly. Windows can't
+// clear the backlog on its own, so users must clear the queue manually
+// through the command line.
+// Firefox also fills the C:\ProgramData\Mozilla folder with leftover temp files
+// whenever this pref stays enabled.
+// [NOTE] Neither bug affects browsing directly, but Firefox runs for hours at
+// a stretch on most systems, so updates can just as easily download over the
+// regular network path instead of BITS.
+// [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1856462 (queue overflow bug,
+// marked fixed, but still reported as of mid-2026)
+// [2] https://bugzilla.mozilla.org/show_bug.cgi?id=1879383 (leftover temp files)
+// [3] https://www.reddit.com/r/firefox/comments/1oglolg/bug_windows_bitsjob/
+// (recent report of the queue overflow bug)
+//user_pref("app.update.BITS.enabled", false); // [WINDOWS]
+
  /******************************************************************************
  * SECTION: SAFE BROWSING (SB)                                               *
 ******************************************************************************/
@@ -1902,7 +1890,6 @@ defaultPref("pdfjs.enableScripting", false); // [FF86+]
 // file, including the name, origin, size and a cryptographic hash of the contents, to the Google
 // Safe Browsing service which helps Firefox determine whether or not the file should be blocked.
 // [NOTE] If you do not understand the consequences, override this.
-defaultPref("browser.safebrowsing.downloads.remote.enabled", false);
       //user_pref("browser.safebrowsing.downloads.remote.url", "");
 // disable SB checks for unwanted software
 // [SETTING] Privacy & Security>Security>... "Warn you about unwanted and uncommon software"
@@ -2062,14 +2049,19 @@ defaultPref("datareporting.usage.uploadEnabled", false);
 // Shield is an telemetry system (including Heartbeat) that can also push and test "recipes".
 // [1] https://mozilla.github.io/normandy/
 
+// PREF: disable remote improvements [FF148+]
+// [SETTING] Allow Firefox to improve features, performance, and stability between updates.
+// [1] https://support.mozilla.org/kb/remote-improvements
+// [2] https://experimenter.info/
+defaultPref("nimbus.rollouts.enabled", false);
+
 /******************************************************************************
  * SECTION: CRASH REPORTS                                                    *
 ******************************************************************************/
 
 // PREF: disable crash reports
-    //user_pref("browser.crashReports.unsubmittedCheck.enabled", false); // DEFAULT
 
-// PREF: enforce no submission of backlogged crash reports
+// PREF: no autosubmission of backlogged crash reports
 // [SETTING] Privacy & Security>Firefox Data Collection & Use>Allow Firefox to send backlogged crash reports
 //user_pref("browser.crashReports.unsubmittedCheck.autoSubmit2", false); // [DEFAULT FF132+]
 
@@ -2132,7 +2124,7 @@ defaultPref("datareporting.usage.uploadEnabled", false);
  * Peskyfox                                                                 *
  * "Aquila non capit muscas"                                                *
  * priority: remove annoyances                                              *
- * version: 148                                                             *
+ * version: 152                                                             *
  * url: https://github.com/yokoffing/Betterfox                              *
  * credit: Some prefs are reproduced and adapted from the arkenfox project  *
  * credit urL: https://github.com/arkenfox/user.js                          *
@@ -2179,6 +2171,7 @@ defaultPref("browser.profiles.enabled", true);
 //user_pref("widget.gtk.non-native-titlebar-buttons.enabled", true);
 
 // PREF: disable search engine switcher in the URL bar [FF136+]
+// WARNING: Hides "Quick Actions" suggestions.
 //user_pref("browser.urlbar.scotchBonnet.enableOverride", false);
 
 /****************************************************************************
@@ -2209,13 +2202,20 @@ defaultPref("browser.profiles.enabled", true);
 // PREF: new tab page wallpapers
 //user_pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true); // [DEFAULT FF132+]
 
+// PREF: browser scrollbar styles
+// 0 - Default
+// 1 - Thin and round, more like Chromium ones
+// 2 - Thinner than 1
+// 3 - Even thinner than 1
+// 4 - Very bold and square
+//user_pref("widget.non-native-theme.scrollbar.style", 0); // [DEFAULT]
+
 /****************************************************************************
  * SECTION: AI                                                              *
 ****************************************************************************/
 // PREF: AI default controls
 // [1] https://blog.mozilla.org/en/firefox/how-to-use-ai-controls/
 defaultPref("browser.ai.control.default", "blocked");
-defaultPref("browser.ml.enable", false);
 
 // PREF: Translations
 //user_pref("browser.ai.control.translations", "blocked");
@@ -2226,14 +2226,12 @@ defaultPref("browser.ml.enable", false);
 // PREF: Tab group suggestions
 // [1] https://support.mozilla.org/kb/how-use-ai-enhanced-tab-groups
 //user_pref("browser.ai.control.smartTabGroups", "blocked");
-defaultPref("browser.tabs.groups.smart.enabled", false);
 
 // PREF: Key points in link previews
 //user_pref("browser.ai.control.linkPreviewKeyPoints", "blocked");
 
 // PREF: Chatbot in sidebar
 //user_pref("browser.ai.control.sidebarChatbot", "blocked");
-defaultPref("browser.ml.chat.enabled", false);
 
 /****************************************************************************
  * SECTION: TRANSLATIONS                                                    *
@@ -2565,6 +2563,7 @@ defaultPref("browser.newtabpage.activity-stream.showSponsoredCheckboxes", false)
 // PREF: leave Bookmarks Menu open when selecting a site
 
 // PREF: restore "View image info" on right-click
+//user_pref("browser.menu.showViewImageInfo", true);
 
 // PREF: show all matches in Findbar
 
@@ -2597,6 +2596,7 @@ defaultPref("browser.newtabpage.activity-stream.showSponsoredCheckboxes", false)
 //user_pref("browser.meta_refresh_when_inactive.disabled", true);
 
 // PREF: do not select the space next to a word when selecting a word
+//user_pref("layout.word_select.eat_space_to_next_word", false);
 
 // PREF: controls if a double-click word selection also deletes one adjacent whitespace
 // This mimics native behavior on macOS.
@@ -2765,6 +2765,9 @@ defaultPref("browser.contentblocking.database.enabled", false);
 defaultPref("browser.contentblocking.cfr-milestone.enabled", false);
 defaultPref("default-browser-agent.enabled", false);
 defaultPref("dom.private-attribution.submission.enabled", false);
+defaultPref("toolkit.telemetry.dap_enabled", false);
+defaultPref("browser.search.serpEventTelemetryCategorization.enabled", false);
+defaultPref("messaging-system.rsexperimentloader.enabled", false);
 defaultPref("datareporting.policy.dataSubmissionPolicyAcceptedVersion", 2);
 defaultPref("toolkit.telemetry.prompted", 2);
 
@@ -2776,7 +2779,8 @@ defaultPref("services.sync.enabled", false);
 defaultPref("webextensions.storage.sync.enabled", false);
 
 // ═══════════════════════════════════════════
-// STUDIES & EXPERIMENTS — disabled
+// STUDIES & EXPERIMENTS — off by default, user may re-enable
+// (no enterprise lock: DisableFirefoxStudies policy intentionally absent)
 // ═══════════════════════════════════════════
 defaultPref("app.shield.optoutstudies.enabled", false);
 defaultPref("app.normandy.enabled", false);
@@ -2853,11 +2857,16 @@ defaultPref("extensions.pocket.site", " ");
 defaultPref("extensions.pocket.showHome", false);
 
 // ═══════════════════════════════════════════
-// DNS OVER HTTPS — Quad9
+// DNS OVER HTTPS — Quad9 (unlocked: user may change provider)
 // ═══════════════════════════════════════════
 defaultPref("network.trr.custom_uri", "https://dns.quad9.net/dns-query");
 defaultPref("network.trr.mode", 2);
 defaultPref("network.trr.uri", "https://dns.quad9.net/dns-query");
+defaultPref("network.trr.bootstrapAddr", "9.9.9.9");
+defaultPref("network.trr.request-timeout", 1500);
+defaultPref("network.trr.early-AAAA", true);
+defaultPref("network.trr.disable-ECS", true);
+defaultPref("network.dns.echconfig.enabled", true);
 
 // ═══════════════════════════════════════════
 // DEVTOOLS — docked right, ready to use
@@ -2939,7 +2948,13 @@ defaultPref("network.dns.max_high_priority_threads", 40);
 defaultPref("network.dns.max_any_priority_threads", 24);
 defaultPref("browser.cache.disk.max_chunks_memory_usage", 40960);
 defaultPref("browser.cache.disk.max_priority_chunks_memory_usage", 40960);
-defaultPref("browser.cache.disk.preload_chunk_count", 4);
+defaultPref("browser.cache.disk.preload_chunk_count", 8);
+defaultPref("javascript.options.baselinejit.threshold", 50);
+defaultPref("browser.display.auto_quality_min_font_size", 0);
+defaultPref("content.switch.threshold", 300000);
+defaultPref("network.http.pacing.requests.min-parallelism", 12);
+defaultPref("network.http.pacing.requests.burst", 20);
+defaultPref("browser.sessionstore.max_tabs_undo", 10);
 defaultPref("browser.cache.frecency_half_life_hours", 6);
 defaultPref("browser.cache.check_doc_frequency", 3);
 defaultPref("image.mem.shared.unmap.min_expiration_ms", 120000);
@@ -2948,8 +2963,8 @@ defaultPref("dom.iframe_lazy_loading.enabled", true);
 // ═══════════════════════════════════════════
 // SPEED POLICY — tunable goals (override locally if you want a different tradeoff)
 // ═══════════════════════════════════════════
-// Keep history forever:
-//   • places.history.expiration.max_pages → high cap (below); alternatively lower for less SQLite work
+// Keep history capped (100k pages) for fast startup/awesomebar on old
+// profiles; INT_MAX pins everything forever at SQLite cost.
 // Prefer RAM over disk:
 //   • Large browser.cache.memory.capacity; keep disk cache on for revisits, or set
 //     browser.cache.disk.enable false to minimize disk (hurts cold/offline repeat loads)
@@ -2969,7 +2984,7 @@ defaultPref("dom.iframe_lazy_loading.enabled", true);
 // Speculative networking (more background DNS/connects; snappier perceived loads):
 //   • network.predictor*, prefetch-next, dns prefetch on, urlbar speculative connect
 //
-defaultPref("places.history.expiration.max_pages", 2147483647);
+defaultPref("places.history.expiration.max_pages", 100000);
 defaultPref("browser.cache.memory.capacity", 262144);
 defaultPref("browser.cache.disk.smart_size.enabled", false);
 defaultPref("browser.cache.disk.capacity", 1048576);
@@ -3049,7 +3064,6 @@ defaultPref("browser.tabs.tabmanager.enabled", false);
 // ═══════════════════════════════════════════
 defaultPref("browser.translations.select.enable", false);
 defaultPref("dom.text_fragments.enabled", false);
-defaultPref("privacy.query_stripping.strip_on_share.enabled", false);
 defaultPref("devtools.accessibility.enabled", false);
 defaultPref("browser.ml.chat.menu", false);
 defaultPref("browser.ml.linkPreview.enabled", false);
@@ -3057,6 +3071,17 @@ defaultPref("dom.text-recognition.enabled", false);
 defaultPref("browser.search.visualSearch.featureGate", false);
 defaultPref("widget.macos.native-context-menus", false);
 defaultPref("browser.search.separatePrivateDefault.ui.enabled", false);
+
+// ═══════════════════════════════════════════
+// AI / ML — off (no global toggle exists; each surface disabled separately)
+// Translations stay on: on-device, privacy-preserving.
+// ═══════════════════════════════════════════
+defaultPref("browser.ml.enable", false);
+defaultPref("browser.ml.chat.enabled", false);
+defaultPref("browser.ml.chat.shortcuts", false);
+defaultPref("browser.tabs.groups.smart.enabled", false);
+defaultPref("browser.tabs.groups.smart.userEnabled", false);
+defaultPref("extensions.ml.enabled", false);
 
 // ═══════════════════════════════════════════
 // TAB & UX BEHAVIOR — sensible defaults
@@ -3082,7 +3107,10 @@ defaultPref("screenshots.browser.component.enabled", false);
 defaultPref("browser.search.context.loadInBackground", true);
 
 // ═══════════════════════════════════════════
-// DOWNLOADS — sensible handling
+// DOWNLOADS — sensible handling + resumable big downloads
+// network.http.response.timeout 300s (default since FF28) aborts slow
+// downloads and breaks resume; 0 disables the timeout so the server's
+// Range support actually gets used instead of a stale .part being ignored.
 // ═══════════════════════════════════════════
 defaultPref("browser.download.always_ask_before_handling_new_types", false);
 defaultPref("browser.download.manager.addToRecentDocs", false);
@@ -3091,6 +3119,20 @@ defaultPref("browser.download.alwaysOpenPanel", false);
 defaultPref("browser.download.manager.showWhenStarting", false);
 defaultPref("browser.download.open_pdf_attachments_inline", true);
 defaultPref("browser.download.useDownloadDir", true);
+defaultPref("network.http.response.timeout", 0);
+
+// ═══════════════════════════════════════════
+// UI — pre-Nova (pre-157) look
+// Nova rounds every corner to match macOS Tahoe; disabling it restores
+// the classic squarer chrome. browser.nova.enabled is the master switch,
+// plus each per-surface toggle so no Nova styling leaks through if the
+// master switch ever stops covering a surface.
+// ═══════════════════════════════════════════
+defaultPref("browser.nova.enabled", false);
+defaultPref("browser.aboutaddons.novaThemesPickerEnabled", false);
+defaultPref("browser.newtabpage.activity-stream.nova.enabled", false);
+defaultPref("browser.urlbar.quicksuggest.ampTopPickUseNovaIconSize", false);
+defaultPref("pdfjs.enableNova", false);
 
 // ═══════════════════════════════════════════
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
@@ -3155,8 +3197,19 @@ defaultPref("privacy.globalprivacycontrol.functionality.enabled", true);
 defaultPref("privacy.globalprivacycontrol.pbmode.enabled", true);
 defaultPref("privacy.donottrackheader.enabled", true);
 defaultPref("privacy.fingerprintingProtection", true);
+defaultPref("privacy.fingerprintingProtection.remoteOverrides.enabled", false);
 defaultPref("privacy.query_stripping.enabled", true);
 defaultPref("privacy.query_stripping.enabled.pbmode", true);
+defaultPref("privacy.query_stripping.strip_on_share.enabled", true);
+defaultPref("privacy.bounceTrackingProtection.mode", 1);
+
+// ═══════════════════════════════════════════
+// WEBRTC — keep calling working, trim IP leaks
+// (full media.peerconnection.enabled=false breaks Meet/Calls; these two
+// only suppress host-candidate exposure)
+// ═══════════════════════════════════════════
+defaultPref("media.peerconnection.ice.proxy_only_if_behind_proxy", true);
+defaultPref("media.peerconnection.ice.default_address_only", true);
 
 // ═══════════════════════════════════════════
 // WARNING BYPASS — keep safety nets, but never block the user
@@ -3167,6 +3220,7 @@ defaultPref("browser.safebrowsing.malware.enabled", true);
 defaultPref("browser.safebrowsing.phishing.enabled", true);
 defaultPref("browser.safebrowsing.blockedURIs.enabled", true);
 defaultPref("browser.safebrowsing.downloads.enabled", true);
+defaultPref("browser.safebrowsing.downloads.remote.enabled", false);
 defaultPref("security.warn_entering_weak", false);
 defaultPref("security.warn_entering_weak.show_once", false);
 defaultPref("security.warn_leaving_secure", false);

@@ -371,6 +371,15 @@ fn download_dmg(
         }
     }
     progress.sub(1.0, "Firefox download complete");
+    // A truncated stream (connection dropped exactly at a chunk boundary)
+    // reads as clean EOF. Without a length check we'd hand a corrupt DMG
+    // to hdiutil and fail there with a confusing error — or worse, retry
+    // logic never fires. Fail here so download_dmg_with_retry retries.
+    if total > 0 && downloaded != total {
+        return Err(format!(
+            "incomplete download: got {downloaded} of {total} bytes"
+        ));
+    }
     Ok(())
 }
 

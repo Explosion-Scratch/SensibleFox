@@ -374,7 +374,8 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
     echo "    ↓ Downloading Firefox.dmg..."
     BUILD_TMP="$(mktemp -d)"
     trap 'rm -rf "$BUILD_TMP"' EXIT
-    curl -fL --retry 3 --output "$BUILD_TMP/Firefox.dmg" "$FIREFOX_DMG_URL"
+    curl -fL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 1800 \
+        --output "$BUILD_TMP/Firefox.dmg" "$FIREFOX_DMG_URL"
     echo "    ↪ Extracting Firefox.app into payload..."
     MOUNT="$BUILD_TMP/mount"
     mkdir -p "$MOUNT"
@@ -383,7 +384,7 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
     /usr/bin/hdiutil detach -quiet "$MOUNT" || true
 
     echo "    ↓ Downloading uBlock Origin XPI to bundle..."
-    curl -fL --retry 3 \
+    curl -fL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 600 \
         --output "$OFF_ROOT$BUNDLE_REL/uBlock0@raymondhill.net.xpi" \
         "$UBLOCK_XPI_URL"
 

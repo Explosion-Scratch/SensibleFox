@@ -4,10 +4,12 @@ set -euo pipefail
 # SensibleFox — Build a standalone patched Firefox.app as a DMG
 #
 # Produces:
-#   dist/SensibleFox.dmg — a Firefox.app with all SensibleFox customizations
-#                          baked directly into the app bundle via autoconfig +
-#                          enterprise policies. Every new profile created from
-#                          this app gets sensiblefox defaults automatically.
+#   dist/SensibleFox.dmg — a SensibleFox.app (branded + re-signed Firefox)
+#                          with all SensibleFox customizations baked directly
+#                          into the app bundle via autoconfig + enterprise
+#                          policies. Every new profile created from this app
+#                          gets sensiblefox defaults automatically.
+#                          Download → open DMG → drag to /Applications → open.
 #
 # The patched app contains:
 #   Resources/defaults/pref/autoconfig.js     — bootstraps sensiblefox.cfg
@@ -20,6 +22,16 @@ set -euo pipefail
 # Env knobs:
 #   FIREFOX_LANG     default: en-US
 #   DMG_VOLUME_NAME  default: SensibleFox
+#   SENSIBLEFOX_APP_NAME   default: SensibleFox
+#   SENSIBLEFOX_BUNDLE_ID  default: com.sensiblefox.browser
+#   SENSIBLEFOX_ICON       default: assets/SensibleFox.icns — baked into the
+#                          bundle (CFBundleIconFile) so the icon survives
+#                          reboots, cache clears, and reinstalls.
+#   DEVELOPER_ID_APPLICATION  Developer ID identity for re-signing the
+#                             branded app (smooth Gatekeeper on other Macs).
+#                             Without it the app is ad-hoc signed: works
+#                             locally, needs right-click → Open elsewhere.
+#   NOTARYTOOL_PROFILE      notarize + staple the finished DMG.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -29,6 +41,9 @@ GEN_DIR="$ROOT_DIR/generated"
 
 FIREFOX_LANG="${FIREFOX_LANG:-en-US}"
 DMG_VOLUME_NAME="${DMG_VOLUME_NAME:-SensibleFox}"
+SENSIBLEFOX_APP_NAME="${SENSIBLEFOX_APP_NAME:-SensibleFox}"
+SENSIBLEFOX_BUNDLE_ID="${SENSIBLEFOX_BUNDLE_ID:-com.sensiblefox.browser}"
+SENSIBLEFOX_ICON="${SENSIBLEFOX_ICON:-$ASSETS_DIR/SensibleFox.icns}"
 FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=$FIREFOX_LANG"
 VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
 UBLOCK_XPI_URL="https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/platform:3/ublock-origin.xpi"
@@ -61,7 +76,8 @@ BUILD_TMP="$(mktemp -d)"
 cleanup() { rm -rf "$BUILD_TMP"; }
 trap cleanup EXIT
 
-curl -fL --retry 3 --output "$BUILD_TMP/Firefox.dmg" "$FIREFOX_DMG_URL"
+curl -fL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 1800 \
+    --output "$BUILD_TMP/Firefox.dmg" "$FIREFOX_DMG_URL"
 
 # ── Mount + extract Firefox.app ──────────────────────────────────────────
 echo "  → Extracting Firefox.app..."
@@ -141,14 +157,73 @@ cp "$ASSETS_DIR/uBlock0@raymondhill.net.json" "$DISTRIBUTION/uBlock0@raymondhill
 # ── Patch: uBlock Origin XPI (distribution/extensions/) ──────────────────
 echo "  → Downloading uBlock Origin XPI..."
 mkdir -p "$DISTRIBUTION/extensions"
-curl -fL --retry 3 \
+curl -fL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 600 \
     --output "$DISTRIBUTION/extensions/uBlock0@raymondhill.net.xpi" \
     "$UBLOCK_XPI_URL"
 echo "    uBlock Origin installed to distribution/extensions/"
 
+# ── Brand: Firefox.app → SensibleFox.app ─────────────────────────────────
+# Patching the bundle invalidates Mozilla's code signature, so the app must
+# be re-signed under our own identity. Renaming (rather than shipping a
+# second "Firefox.app") avoids clobbering a user's stock Firefox in
+# /Applications and gives the branded app its own Dock identity.
+echo "  → Branding: $SENSIBLEFOX_APP_NAME.app..."
+BRANDED_APP="$STAGING/$SENSIBLEFOX_APP_NAME.app"
+mv "$STAGING/Firefox.app" "$BRANDED_APP"
+PLIST="$BRANDED_APP/Contents/Info.plist"
+set_or_add() {
+    # $1 = plist key, $2 = type, $3 = value. Mozilla's Info.plist may not
+    # contain every key (CFBundleDisplayName is absent upstream) — and
+    # under `set -e` a bare `Set` failure would abort the whole build.
+    /usr/libexec/PlistBuddy -c "Set :$1 '$3'" "$PLIST" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :$1 $2 '$3'" "$PLIST"
+}
+set_or_add CFBundleName string "$SENSIBLEFOX_APP_NAME"
+set_or_add CFBundleDisplayName string "$SENSIBLEFOX_APP_NAME"
+set_or_add CFBundleIdentifier string "$SENSIBLEFOX_BUNDLE_ID"
+
+# ── Custom icon — baked into the bundle (not Finder Get-Info pasting,
+# which lives in a fragile resource-fork xattr and resets). Must run before
+# re-signing so the signature covers the new Resources.
+# Hard gate (not warn-and-continue): the branded app must never ship with
+# the stock Firefox icon. Pass SENSIBLEFOX_ICON=none to opt out explicitly.
+# ──────────────────────────────────────────────────────────────────────────
+if [ "${SENSIBLEFOX_ICON:-}" = "none" ]; then
+    echo "  (SENSIBLEFOX_ICON=none — keeping upstream icon)"
+elif [ -f "${SENSIBLEFOX_ICON:-}" ]; then
+    echo "  → Applying custom icon..."
+    # CFBundleIconFile takes the icon name WITHOUT extension (Apple
+    # convention — matches Mozilla's own "firefox" value). Finder ignores
+    # the key when it carries the ".icns" suffix.
+    APP_ICON_NAME="$(basename "$SENSIBLEFOX_ICON" .icns)"
+    cp "$SENSIBLEFOX_ICON" "$BRANDED_APP/Contents/Resources/$APP_ICON_NAME.icns"
+    rm -f "$BRANDED_APP/Contents/Resources/firefox.icns"
+    set_or_add CFBundleIconFile string "$APP_ICON_NAME"
+    echo "    icon: $APP_ICON_NAME.icns"
+else
+    echo "  ✗ SENSIBLEFOX_ICON=$SENSIBLEFOX_ICON missing." >&2
+    echo "    The icon asset must be committed (assets/SensibleFox.icns)," >&2
+    echo "    or pass SENSIBLEFOX_ICON=<path|none>." >&2
+    exit 1
+fi
+
 # ── Strip quarantine attributes ──────────────────────────────────────────
 echo "  → Stripping quarantine attributes..."
-xattr -cr "$STAGING/Firefox.app" 2>/dev/null || true
+xattr -cr "$BRANDED_APP" 2>/dev/null || true
+
+# ── Re-sign (required: patching broke Mozilla's signature) ───────────────
+echo "  → Re-signing $SENSIBLEFOX_APP_NAME.app..."
+if [ -n "${DEVELOPER_ID_APPLICATION:-}" ]; then
+    /usr/bin/codesign --force --deep --timestamp --options runtime \
+        --sign "$DEVELOPER_ID_APPLICATION" "$BRANDED_APP"
+    echo "    signed with: $DEVELOPER_ID_APPLICATION"
+else
+    # Ad-hoc: launches on this Mac, right-click → Open on others.
+    /usr/bin/codesign --force --deep --sign - "$BRANDED_APP"
+    echo "    ad-hoc signed (no DEVELOPER_ID_APPLICATION — Gatekeeper will"
+    echo "    prompt on other Macs; right-click → Open, or sign + notarize)"
+fi
+/usr/bin/codesign --verify --deep --strict "$BRANDED_APP"
 
 # ── Create DMG ───────────────────────────────────────────────────────────
 OUT_DMG="$DIST_DIR/SensibleFox.dmg"
@@ -162,15 +237,23 @@ echo "  → Creating SensibleFox.dmg..."
     -format UDZO \
     "$OUT_DMG" > /dev/null
 
+if [ -n "${NOTARYTOOL_PROFILE:-}" ]; then
+    echo "  → Notarizing SensibleFox.dmg..."
+    xcrun notarytool submit "$OUT_DMG" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
+    xcrun stapler staple "$OUT_DMG"
+fi
+
 DMG_SIZE=$(du -h "$OUT_DMG" | cut -f1 | tr -d ' ')
 echo ""
-echo "  ✓ Built dist/SensibleFox.dmg ($DMG_SIZE) — Firefox $FF_VERSION"
+echo "  ✓ Built dist/SensibleFox.dmg ($DMG_SIZE) — Firefox $FF_VERSION as $SENSIBLEFOX_APP_NAME.app"
 echo ""
 echo "    Install: open dist/SensibleFox.dmg"
-echo "    Then drag Firefox.app to /Applications"
+echo "    Then drag $SENSIBLEFOX_APP_NAME.app to /Applications and open it."
 echo ""
 echo "    The patched app applies SensibleFox defaults to every new profile via:"
 echo "      • Enterprise policies (distribution/policies.json)"
 echo "      • Autoconfig prefs (sensiblefox.cfg → defaultPref)"
 echo "      • CSS injection (autoconfig → Resources/sensiblefox/)"
+echo "      • Ctrl/Cmd+Shift+A → tab search (autoconfig → sensiblefox.cfg)"
+echo "      • Custom SensibleFox icon (baked into bundle)"
 echo "      • uBlock Origin (distribution/extensions/)"

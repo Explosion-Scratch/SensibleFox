@@ -2,7 +2,6 @@
   "policies": {
     "SkipTermsOfUse": true,
     "DisableTelemetry": true,
-    "DisableFirefoxStudies": true,
     "DisableFeedbackCommands": true,
     "DisablePocket": true,
     "DontCheckDefaultBrowser": true,
@@ -68,6 +67,12 @@
       "network.predictor.enable-prefetch": true,
       "network.preconnect": true,
       "network.http.speculative-parallel-limit": 10,
+      "network.http.response.timeout": 0,
+      "browser.nova.enabled": false,
+      "browser.aboutaddons.novaThemesPickerEnabled": false,
+      "browser.newtabpage.activity-stream.nova.enabled": false,
+      "browser.urlbar.quicksuggest.ampTopPickUseNovaIconSize": false,
+      "pdfjs.enableNova": false,
       "browser.urlbar.speculativeConnect.enabled": true,
       "browser.places.speculativeConnect.enabled": true
     }
