@@ -2795,6 +2795,15 @@ defaultPref("browser.crashReports.unsubmittedCheck.autoSubmit2", false);
 defaultPref("browser.crashReports.unsubmittedCheck.enabled", false);
 
 // ═══════════════════════════════════════════
+// UPDATES — always track latest ESR
+// The ESR base is what keeps unsandboxed autoconfig working; a stale or
+// rapid-channel install defeats it. The CLI replaces non-current installs
+// (see src/firefox.rs ESR freshness check) and the in-place updater covers
+// the rest — never disable it here or via a DisableAppUpdate policy.
+// ═══════════════════════════════════════════
+defaultPref("app.update.auto", true);
+
+// ═══════════════════════════════════════════
 // PASSWORD MANAGER — disabled (use a real one)
 // ═══════════════════════════════════════════
 defaultPref("signon.rememberSignons", false);
@@ -2992,6 +3001,9 @@ defaultPref("browser.sessionhistory.max_total_viewers", 16);
 defaultPref("dom.ipc.processCount", 8);
 defaultPref("dom.ipc.processCount.webIsolated", 8);
 defaultPref("browser.sessionstore.interval", 60000);
+// Lazy-load pinned tabs at startup (also stops login-prompt tabs stealing
+// focus); complements the 60s interval above.
+defaultPref("browser.sessionstore.restore_pinned_tabs_on_demand", true);
 defaultPref("accessibility.force_disabled", 1);
 defaultPref("reader.parse-on-load.enabled", false);
 defaultPref("gfx.canvas.accelerated", true);
@@ -3040,6 +3052,7 @@ defaultPref("full-screen-api.transition-duration.leave", "0 0");
 defaultPref("full-screen-api.warning.delay", -1);
 defaultPref("full-screen-api.warning.timeout", 0);
 defaultPref("browser.fullscreen.autohide", true);
+defaultPref("full-screen-api.macos-native-full-screen", true);
 
 // ═══════════════════════════════════════════
 // URL BAR & SEARCH SUGGESTIONS — default engine (Google) + history,
@@ -3055,6 +3068,9 @@ defaultPref("browser.urlbar.suggest.topsites", false);
 defaultPref("browser.urlbar.suggest.calculator", true);
 defaultPref("browser.urlbar.unitConversion.enabled", true);
 defaultPref("browser.urlbar.trending.featureGate", false);
+defaultPref("browser.urlbar.suggest.trending", false);
+defaultPref("browser.urlbar.openViewOnFocus", false);
+defaultPref("browser.urlbar.showSearchTerms.enabled", true);
 defaultPref("browser.search.hiddenOneOffs", "Amazon.com,eBay,Perplexity");
 defaultPref("browser.urlbar.scotchBonnet.enableOverride", false);
 defaultPref("browser.tabs.tabmanager.enabled", false);
@@ -3094,6 +3110,14 @@ defaultPref("browser.warnOnQuitShortcut", false);
 defaultPref("browser.warnOnQuit", false);
 defaultPref("browser.tabs.hoverPreview.enabled", true);
 defaultPref("browser.tabs.hoverPreview.showThumbnails", true);
+// Tab groups + workspace-like placement (new tabs open next to current,
+// landing inside the current group). Tab groups shipped FF138+, so these
+// pin on ESR 153.
+defaultPref("browser.tabs.groups.enabled", true);
+defaultPref("browser.tabs.insertAfterCurrent", true);
+defaultPref("browser.tabs.insertAfterCurrentExceptPinned", true);
+// macOS-expected: closing the last tab leaves a blank window (no quit).
+defaultPref("browser.tabs.closeWindowWithLastTab", false);
 defaultPref("browser.bookmarks.openInTabClosesMenu", false);
 defaultPref("browser.menu.showViewImageInfo", false);
 defaultPref("findbar.highlightAll", true);
@@ -3101,6 +3125,7 @@ defaultPref("layout.word_select.eat_space_to_next_word", false);
 defaultPref("editor.word_select.delete_space_after_doubleclick_selection", true);
 defaultPref("dom.disable_window_move_resize", true);
 defaultPref("media.videocontrols.picture-in-picture.video-toggle.enabled", false);
+defaultPref("media.videocontrols.picture-in-picture.improved-video-controls.enabled", true);
 defaultPref("accessibility.typeaheadfind", false);
 defaultPref("media.autoplay.blocking_policy", 2);
 defaultPref("screenshots.browser.component.enabled", false);
@@ -3145,6 +3170,9 @@ defaultPref("browser.formfill.enable", false);
 defaultPref("widget.non-native-theme.scrollbar.style", 1);
 defaultPref("ui.useOverlayScrollbars", 1);
 defaultPref("browser.compactmode.show", true);
+// No auto translate popup (icon stays; on-device translation remains the
+// Chrome-differentiator).
+defaultPref("browser.translations.automaticallyPopup", false);
 defaultPref("browser.display.focus_ring_on_anything", true);
 defaultPref("browser.display.focus_ring_style", 0);
 defaultPref("browser.display.focus_ring_width", 0);

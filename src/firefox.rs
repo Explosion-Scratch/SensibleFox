@@ -105,6 +105,11 @@ impl InstallTarget {
 /// Skips signature verification — the binary's existence + a quick test
 /// launch is enough; deep `codesign --verify --deep` was the single
 /// slowest part of every CLI run (multi-second on every invocation).
+///
+/// Reuse fast path verifies ESR freshness: SensibleFox tracks latest ESR
+/// (unsandboxed autoconfig only works on ESR-class channels), so a stale
+/// or rapid-channel install falls through to replacement. Unknowns
+/// (offline, unparseable) fail OPEN — reuse, never block launch.
 pub fn detect_or_download(
     target: &InstallTarget,
     _unattended: bool,
@@ -113,19 +118,37 @@ pub fn detect_or_download(
 ) -> Result<PathBuf, String> {
     let bin = target.bin_path();
     let app_path = target.app_path();
+    // Short-timeout client for the ESR freshness check only (fail-open).
+    let check_client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .ok();
 
     if app_path.exists() && bin.exists() && !replace_existing {
-        if !progress.is_quiet() {
-            let version = read_firefox_version(&app_path)
-                .unwrap_or_else(|| "unknown version".into());
-            println!(
-                "  {} Firefox {} found at {}",
-                style("✓").green(),
-                version,
-                style(app_path.display()).cyan()
-            );
+        match esr_status(&app_path, check_client.as_ref()) {
+            EsrStatus::Stale { installed, latest } => {
+                if !progress.is_quiet() {
+                    println!(
+                        "  {} Firefox {} found, but latest ESR is {} — updating…",
+                        style("↻").cyan(),
+                        installed,
+                        latest
+                    );
+                }
+                // fall through to replacement below
+            }
+            EsrStatus::Current(version) | EsrStatus::Unknown(version) => {
+                if !progress.is_quiet() {
+                    println!(
+                        "  {} Firefox {} found at {}",
+                        style("✓").green(),
+                        version,
+                        style(app_path.display()).cyan()
+                    );
+                }
+                return Ok(bin);
+            }
         }
-        return Ok(bin);
     }
 
     if app_path.exists() {
@@ -137,13 +160,29 @@ pub fn detect_or_download(
     }
 
     // A plain CLI run can reuse Firefox from a standard location instead of
-    // installing into ~/Applications.
+    // installing into ~/Applications — but only if it's current ESR.
     if matches!(target, InstallTarget::User) {
         if let Some(p) = which_firefox() {
-            if !progress.is_quiet() {
-                println!("  {} Firefox found at {}", style("✓").green(), p.display());
+            let current = app_bundle_from_bin(&p)
+                .map(|app| {
+                    matches!(
+                        esr_status(&app, check_client.as_ref()),
+                        EsrStatus::Current(_) | EsrStatus::Unknown(_)
+                    )
+                })
+                .unwrap_or(true);
+            if current {
+                if !progress.is_quiet() {
+                    println!("  {} Firefox found at {}", style("✓").green(), p.display());
+                }
+                return Ok(p);
+            } else if !progress.is_quiet() {
+                println!(
+                    "  {} Existing Firefox at {} is not current ESR — installing fresh…",
+                    style("↻").cyan(),
+                    p.display()
+                );
             }
-            return Ok(p);
         }
     }
 
@@ -383,13 +422,122 @@ fn download_dmg(
     Ok(())
 }
 
+// ── ESR freshness ─────────────────────────────────────────────────────
+// SensibleFox tracks latest ESR: download.mozilla.org esr-latest-ssl always
+// resolves to the newest ESR, and FIREFOX_ESR in product-details names it.
+// Channel comes from Contents/Resources/application.ini SourceRepository
+// (mozilla-esr* on ESR, mozilla-release on rapid) — the old channel-prefs.js
+// no longer ships; the channel is baked into omni.ja instead.
+
+/// Numeric components of a Firefox version; "153.5.0esr" -> [153, 5, 0].
+fn normalize_version(v: &str) -> Vec<u64> {
+    let t = v.trim();
+    let t = t
+        .strip_suffix("esr")
+        .or_else(|| t.strip_suffix("ESR"))
+        .unwrap_or(t);
+    t.split('.')
+        .map(|c| {
+            c.chars()
+                .take_while(|ch| ch.is_ascii_digit())
+                .collect::<String>()
+                .parse::<u64>()
+                .unwrap_or(0)
+        })
+        .collect()
+}
+
+fn versions_equal(a: &str, b: &str) -> bool {
+    let mut na = normalize_version(a);
+    let mut nb = normalize_version(b);
+    let len = na.len().max(nb.len());
+    na.resize(len, 0);
+    nb.resize(len, 0);
+    na == nb
+}
+
+/// (version, source_repo) from the [App] section of application.ini.
+fn read_application_ini(app_path: &Path) -> Option<(String, String)> {
+    let text =
+        std::fs::read_to_string(app_path.join("Contents/Resources/application.ini")).ok()?;
+    let mut in_app = false;
+    let mut version = None;
+    let mut repo = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_app = line.eq_ignore_ascii_case("[App]");
+            continue;
+        }
+        if !in_app {
+            continue;
+        }
+        if let Some(v) = line.strip_prefix("Version=") {
+            version = Some(v.trim().to_string());
+        } else if let Some(r) = line.strip_prefix("SourceRepository=") {
+            repo = Some(r.trim().to_string());
+        }
+    }
+    Some((version?, repo?))
+}
+
+/// Pure decision: must this install be replaced to track latest ESR?
+/// Wrong channel (even numerically newer rapid) always replaces; on ESR,
+/// any version mismatch replaces.
+fn needs_esr_replace(installed_version: &str, source_repo: &str, latest_esr: &str) -> bool {
+    if !source_repo.to_lowercase().contains("esr") {
+        return true;
+    }
+    !versions_equal(installed_version, latest_esr)
+}
+
+enum EsrStatus {
+    /// Right channel, version matches latest ESR — reuse.
+    Current(String),
+    /// Wrong channel or older version — reinstall. Holds (installed, latest).
+    Stale { installed: String, latest: String },
+    /// Couldn't determine (offline, unparseable) — reuse, never block launch.
+    Unknown(String),
+}
+
+fn esr_status(app_path: &Path, client: Option<&reqwest::blocking::Client>) -> EsrStatus {
+    let installed = read_firefox_version(app_path).unwrap_or_else(|| "unknown version".into());
+    let Some((ini_version, repo)) = read_application_ini(app_path) else {
+        return EsrStatus::Unknown(installed);
+    };
+    let Some(c) = client else {
+        return EsrStatus::Unknown(installed);
+    };
+    let Some(latest) = fetch_latest_firefox_version(c) else {
+        return EsrStatus::Unknown(installed);
+    };
+    if needs_esr_replace(&ini_version, &repo, &latest) {
+        EsrStatus::Stale { installed, latest }
+    } else {
+        EsrStatus::Current(installed)
+    }
+}
+
+/// Map `…/Firefox.app/Contents/MacOS/firefox` back to `…/Firefox.app`.
+fn app_bundle_from_bin(bin: &Path) -> Option<PathBuf> {
+    let mut p = bin.to_path_buf();
+    for tail in ["firefox", "MacOS", "Contents"] {
+        if p.ends_with(tail) {
+            p.pop();
+        } else {
+            return None;
+        }
+    }
+    Some(p)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 fn fetch_latest_firefox_version(client: &reqwest::blocking::Client) -> Option<String> {
     let text = client.get(paths::FIREFOX_VERSION_URL).send().ok()?.text().ok()?;
     serde_json::from_str::<serde_json::Value>(&text)
         .ok()?
-        .get("LATEST_FIREFOX_VERSION")?
+        .get("FIREFOX_ESR")?
         .as_str()
         .filter(|v| !v.trim().is_empty())
         .map(str::to_string)
@@ -437,5 +585,95 @@ fn which_firefox() -> Option<PathBuf> {
             .unwrap_or_default(),
     ];
     candidates.into_iter().find(|p| p.exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_esr_versions() {
+        assert_eq!(normalize_version("153.5.0esr"), vec![153, 5, 0]);
+        assert_eq!(normalize_version("115.43.0esr"), vec![115, 43, 0]);
+        assert_eq!(normalize_version("157.0.1"), vec![157, 0, 1]);
+    }
+
+    #[test]
+    fn version_equality_ignores_trailing_zeros_and_esr_suffix() {
+        assert!(versions_equal("153.5", "153.5.0esr"));
+        assert!(versions_equal("153.5.0esr", "153.5.0"));
+        assert!(!versions_equal("153.4.0", "153.5.0esr"));
+        assert!(!versions_equal("157.0.1", "153.5.0esr"));
+    }
+
+    #[test]
+    fn flags_wrong_channel_and_stale_versions() {
+        // rapid channel, even numerically newer, must be replaced
+        assert!(needs_esr_replace(
+            "157.0.1",
+            "https://hg.mozilla.org/releases/mozilla-release",
+            "153.5.0esr"
+        ));
+        // stale ESR
+        assert!(needs_esr_replace(
+            "153.4.0",
+            "https://hg.mozilla.org/releases/mozilla-esr153",
+            "153.5.0esr"
+        ));
+        // current ESR, in 2- and 3-component forms
+        assert!(!needs_esr_replace(
+            "153.5",
+            "https://hg.mozilla.org/releases/mozilla-esr153",
+            "153.5.0esr"
+        ));
+        assert!(!needs_esr_replace(
+            "153.5.0",
+            "https://hg.mozilla.org/releases/mozilla-esr153",
+            "153.5.0esr"
+        ));
+    }
+
+    fn write_test_app(dir: &Path, version: &str, repo: &str) -> PathBuf {
+        let app = dir.join("Firefox.app");
+        std::fs::create_dir_all(app.join("Contents/Resources")).unwrap();
+        std::fs::write(
+            app.join("Contents/Resources/application.ini"),
+            format!(
+                "; fixture\n[App]\nVendor=Mozilla\nName=Firefox\nVersion={version}\n\
+                 SourceRepository={repo}\n\n[Gecko]\nMinVersion={version}\nMaxVersion={version}\n"
+            ),
+        )
+        .unwrap();
+        app
+    }
+
+    #[test]
+    fn parses_application_ini_app_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = write_test_app(
+            dir.path(),
+            "153.5.0",
+            "https://hg.mozilla.org/releases/mozilla-esr153",
+        );
+        assert_eq!(
+            read_application_ini(&app),
+            Some((
+                "153.5.0".to_string(),
+                "https://hg.mozilla.org/releases/mozilla-esr153".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn maps_bin_path_back_to_bundle() {
+        assert_eq!(
+            app_bundle_from_bin(Path::new("/Applications/Firefox.app/Contents/MacOS/firefox")),
+            Some(PathBuf::from("/Applications/Firefox.app"))
+        );
+        assert_eq!(
+            app_bundle_from_bin(Path::new("/usr/local/bin/firefox")),
+            None
+        );
+    }
 }
 

@@ -1,5 +1,17 @@
 
 // ════════════════════════════════════════════════════════════════════════
+// sensiblefox autoconfig — ESR compat shim (115+ changed imports)
+// On ESR with sandbox_enabled=false, Services/Components/Cu exist as
+// globals; this keeps the file working if Mozilla ever narrows the scope.
+// ════════════════════════════════════════════════════════════════════════
+try {
+  if (typeof Services === "undefined" && typeof ChromeUtils !== "undefined") {
+    var Services =
+      ChromeUtils.import("resource://gre/modules/Services.jsm").Services;
+  }
+} catch (e) {}
+
+// ════════════════════════════════════════════════════════════════════════
 // sensiblefox autoconfig — CSS injection
 // Loads bundled stylesheets as global agent/user sheets so every profile
 // gets the sensiblefox UI without per-profile chrome/userChrome.css files.
@@ -62,13 +74,43 @@ try {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// sensiblefox autoconfig — locked UI buttons (sandbox-safe lockPref)
+// sensiblefox autoconfig — Chromium-style <key> remaps (ESR unsandboxed)
+// Private Window → Ctrl/Cmd+Shift+N, Redo → Ctrl/Cmd+Shift+Z. Uses the
+// same browser-delayed-startup-finished observer as the tab-search remap.
+// Guarded: missing IDs are skipped so a future ESR key rename can't break
+// startup. (pattern: chris-lis/firefox-autoconfig, superuser.com/a/1747680)
+// ════════════════════════════════════════════════════════════════════════
+try {
+  Services.obs.addObserver(function (win) {
+    try {
+      var doc = win.document;
+      if (!doc || !doc.getElementById) return;
+      var pb = doc.getElementById("key_privatebrowsing");
+      if (!pb) pb = doc.getElementById("key_newPrivateWindow");
+      if (pb) {
+        pb.setAttribute("modifiers", "accel,shift");
+        pb.setAttribute("key", "N");
+      }
+      var redo = doc.getElementById("key_redo");
+      if (redo) {
+        redo.setAttribute("modifiers", "accel,shift");
+        redo.setAttribute("key", "Z");
+      }
+    } catch (e) {
+      Cu.reportError(e);
+    }
+  }, "browser-delayed-startup-finished");
+} catch (ex) {
+  Cu.reportError(ex);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// sensiblefox autoconfig — locked UI buttons + first-run suppression
 // These match features SensibleFox removes (password manager, pinned
 // startup page): the buttons render greyed-out instead of dead. Cert,
 // cookie, and download management stay accessible on purpose.
-// NOTE: lockPref (not defaultPref) is what actually disables the button —
-// and unlike the privileged JS above, lockPref works inside the release-
-// channel autoconfig sandbox, so this block is live in the shipped app.
+// lockPref works in both sandboxed and unsandboxed autoconfig, so this
+// block is live regardless of channel.
 // ════════════════════════════════════════════════════════════════════════
 lockPref("pref.privacy.disable_button.view_passwords", true);
 lockPref("pref.privacy.disable_button.view_passwords_exceptions", true);
@@ -76,3 +118,10 @@ lockPref("pref.general.disable_button.default_browser", true);
 lockPref("pref.browser.homepage.disable_button.current_page", true);
 lockPref("pref.browser.homepage.disable_button.bookmark_page", true);
 lockPref("pref.browser.homepage.disable_button.restore_default", true);
+// First-run / what's-new suppression, locked so a Firefox update can't
+// silently re-show onboarding (complements the defaultPref first-run
+// skips in sensiblefox-defaults.js).
+lockPref("browser.startup.homepage_override.mstone", "ignore");
+lockPref("startup.homepage_welcome_url", "");
+lockPref("startup.homepage_welcome_url.additional", "");
+lockPref("datareporting.policy.firstRunURL", "");

@@ -24,7 +24,7 @@ pub const MANAGED_STORAGE_DIR_REL: &str = "Library/Application Support/Mozilla/M
 
 // ── Network endpoints ────────────────────────────────────────────────────
 pub const FIREFOX_DMG_URL: &str =
-    "https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=en-US";
+    "https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx&lang=en-US";
 pub const FIREFOX_VERSION_URL: &str =
     "https://product-details.mozilla.org/1.0/firefox_versions.json";
 pub const UBLOCK_XPI_URL: &str = concat!(

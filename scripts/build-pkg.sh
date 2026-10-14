@@ -33,7 +33,7 @@ SUPPORT_DIR="/Library/Application Support/SensibleFox"
 HELPER_APP_NAME="SensibleFox Installer.app"
 HELPER_APP_REL="$SUPPORT_DIR/$HELPER_APP_NAME"
 
-FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=$FIREFOX_LANG"
+FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx&lang=$FIREFOX_LANG"
 VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
 UBLOCK_XPI_URL="https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/platform:3/ublock-origin.xpi"
 
@@ -55,7 +55,7 @@ done
 # ── Look up Firefox version + DMG size for the welcome screen ────────────
 echo "  → Querying Firefox version + DMG size..."
 FF_VERSION="$(curl -fsSL --max-time 15 "$VERSION_URL" 2>/dev/null \
-    | /usr/bin/sed -n 's/.*"LATEST_FIREFOX_VERSION"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | /usr/bin/sed -n 's/.*"FIREFOX_ESR"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
     | head -1 || true)"
 [ -z "$FF_VERSION" ] && FF_VERSION="latest"
 

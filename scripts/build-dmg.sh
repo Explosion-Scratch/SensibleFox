@@ -44,7 +44,7 @@ DMG_VOLUME_NAME="${DMG_VOLUME_NAME:-SensibleFox}"
 SENSIBLEFOX_APP_NAME="${SENSIBLEFOX_APP_NAME:-SensibleFox}"
 SENSIBLEFOX_BUNDLE_ID="${SENSIBLEFOX_BUNDLE_ID:-com.sensiblefox.browser}"
 SENSIBLEFOX_ICON="${SENSIBLEFOX_ICON:-$ASSETS_DIR/SensibleFox.icns}"
-FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=$FIREFOX_LANG"
+FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx&lang=$FIREFOX_LANG"
 VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
 UBLOCK_XPI_URL="https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/platform:3/ublock-origin.xpi"
 
@@ -65,7 +65,7 @@ mkdir -p "$DIST_DIR"
 # ── Look up Firefox version ──────────────────────────────────────────────
 echo "  → Querying Firefox version..."
 FF_VERSION="$(curl -fsSL --max-time 15 "$VERSION_URL" 2>/dev/null \
-    | /usr/bin/sed -n 's/.*"LATEST_FIREFOX_VERSION"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | /usr/bin/sed -n 's/.*"FIREFOX_ESR"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
     | head -1 || true)"
 [ -z "$FF_VERSION" ] && FF_VERSION="latest"
 echo "    Firefox $FF_VERSION"
@@ -226,16 +226,64 @@ fi
 /usr/bin/codesign --verify --deep --strict "$BRANDED_APP"
 
 # ── Create DMG ───────────────────────────────────────────────────────────
+# Pretty drag-to-install layout, cloned from Mozilla's own Firefox.dmg:
+# .background/background.png (1440x880, generic — no Firefox branding),
+# /Applications symlink, .VolumeIcon.icns (SensibleFox fox, not Firefox),
+# icon size 128, positions SensibleFox.app (190,472) / Applications (510,472),
+# window 680x425. Applied live via Finder (volume-name independent).
 OUT_DMG="$DIST_DIR/SensibleFox.dmg"
 rm -f "$OUT_DMG"
 
+echo "  → Styling DMG (drag-to-install layout)..."
+ln -sfn /Applications "$STAGING/Applications"
+mkdir -p "$STAGING/.background"
+cp "$ASSETS_DIR/dmg-background.png" "$STAGING/.background/background.png"
+/usr/bin/SetFile -a V "$STAGING/.background/background.png" 2>/dev/null || true
+cp "$SENSIBLEFOX_ICON" "$STAGING/.VolumeIcon.icns"
+/usr/bin/SetFile -a C "$STAGING" 2>/dev/null || true
+
 echo "  → Creating SensibleFox.dmg..."
+RW_DMG="$DIST_DIR/.SensibleFox-rw.dmg"
+rm -f "$RW_DMG"
 /usr/bin/hdiutil create \
     -volname "$DMG_VOLUME_NAME" \
     -srcfolder "$STAGING" \
     -ov \
-    -format UDZO \
-    "$OUT_DMG" > /dev/null
+    -format UDRW \
+    "$RW_DMG" > /dev/null
+RW_MOUNT="$(mktemp -d)"
+if /usr/bin/hdiutil attach -nobrowse -noverify -quiet -mountpoint "$RW_MOUNT" "$RW_DMG" \
+    && /usr/bin/osascript <<OSA_EOF 2>/dev/null
+tell application "Finder"
+    set theDisk to disk "$DMG_VOLUME_NAME"
+    open theDisk
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, 880, 545}
+    set theViewOptions to the icon view options of container window
+    set arrangement of theViewOptions to not arranged
+    set icon size of theViewOptions to 128
+    set background picture of theViewOptions to file ".background:background.png" of theDisk
+    set position of item "$SENSIBLEFOX_APP_NAME.app" of container window to {190, 472}
+    set position of item "Applications" of container window to {510, 472}
+    close container window
+    open theDisk
+    update container window without registering applications
+    delay 2
+    close container window
+end tell
+OSA_EOF
+then
+    echo "    Finder layout applied (icon view, background, positions)"
+else
+    echo "    (Finder styling skipped — headless session? plain DMG layout)"
+fi
+# Finder writes the .DS_Store on touch — sync it back so the layout sticks.
+/usr/bin/hdiutil detach -quiet "$RW_MOUNT" || true
+rmdir "$RW_MOUNT"
+/usr/bin/hdiutil convert "$RW_DMG" -format UDZO -o "$OUT_DMG" > /dev/null
+rm -f "$RW_DMG"
 
 if [ -n "${NOTARYTOOL_PROFILE:-}" ]; then
     echo "  → Notarizing SensibleFox.dmg..."
