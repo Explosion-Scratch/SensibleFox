@@ -1,0 +1,31 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Rust Apple targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Full build (online PKGs + DMG)
+        # SKIP_OFFLINE=1 skips the ~200MB Firefox-bundled offline PKG;
+        # online PKGs + standalone DMG still exercise every build path.
+        # No signing identities: scripts fall back to ad-hoc signatures.
+        run: SKIP_OFFLINE=1 ./scripts/build.sh
+
+      - name: Verify dist artifacts
+        run: ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensiblefox-dist
+          path: dist/
+          if-no-files-found: error

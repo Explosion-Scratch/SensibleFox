@@ -4,6 +4,7 @@
     "DisableTelemetry": true,
     "DisableFeedbackCommands": true,
     "DisablePocket": true,
+    "DisableFirefoxAccounts": true,
     "DontCheckDefaultBrowser": true,
     "DisableAppUpdate": true,
     "FirefoxHome": {

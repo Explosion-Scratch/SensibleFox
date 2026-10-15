@@ -49,31 +49,137 @@
   box-shadow: 0 0 0 var(--tabs-navbar-shadow-size) rgba(0, 0, 0, 0.05) !important;
 }
 
-@media (-moz-content-prefers-color-scheme: dark) {
-  :root
-    #tabbrowser-tabs:not([noshadowfortests])
-    .tab-background:is([selected], [multiselected]) {
-    box-shadow: 0 0 0 var(--tabs-navbar-shadow-size) hsla(280, 6%, 60%, 0.5)
-        inset,
-      0 0 0 var(--tabs-navbar-shadow-size) rgba(0, 0, 0, 0.6),
-      0 1px 5px rgba(0, 0, 0, 0.1) !important;
-  }
-  :root:-moz-window-inactive
-    #tabbrowser-tabs:not([noshadowfortests])
-    .tab-background:is([selected], [multiselected]) {
-    box-shadow: 0 0 0 var(--tabs-navbar-shadow-size) rgba(0, 0, 0, 0.4) !important;
-  }
-}
-
 /* border between tab bar and navbar */
 :root #nav-bar {
   box-shadow: 0 -1px 0 0 hsla(280, 6%, 0%, 0.1),
     0 -4px 4px -5px hsla(280, 6%, 0%, 0.2);
 }
 
-@media (-moz-content-prefers-color-scheme: dark) {
-  :root #nav-bar {
-    box-shadow: 0 -1px 0 0 hsla(280, 6%, 0%, 0.3),
-      0 -4px 4px -5px hsla(280, 6%, 0%, 0.05) !important;
+/* PerfectDark translucent dark mode — vibrancy stays live underneath.
+ * Palette vendored from PerfectDarkTheme 1.1 (AMO): frame #121212,
+ * toolbar #1e1e1e, field #121212, popup #2e2e2e, text 87% white,
+ * tab text #e0e0e0 (lifted here). No XPI installed on purpose: static
+ * themes paint opaque and would fight the blur; these variables reproduce
+ * the palette while -moz-window-titlebar keeps compositing wallpaper blur.
+ * (Force-install recipe exists — ExtensionSettings install_url pointing at
+ * the AMO file URL — but it adds an opaque paint layer plus an AMO
+ * dependency for zero colors this file can't already express.)
+ * Structure: bar = thin near-black veil (max translucency), selected tab =
+ * darker near-opaque slab so it reads stark against the bar, text near-white.
+ * Inactive windows lose vibrancy OS-side, so they get a solid fallback. */
+@media (prefers-color-scheme: dark), (-moz-content-prefers-color-scheme: dark) {
+  :root {
+    --toolbar-color: rgba(255, 255, 255, 0.87) !important;
+    --tab-text-color: #ececee !important;
+    --toolbar-field-color: #ffffff !important;
+    --urlbar-color: #ffffff !important;
+    --toolbar-field-background-color: rgba(18, 18, 18, 0.68) !important;
+    --toolbar-field-border-color: rgba(255, 255, 255, 0.22) !important;
+    --tab-selected-bgcolor: rgba(18, 18, 20, 0.62) !important;
+    --toolbarbutton-hover-background: rgba(255, 255, 255, 0.09) !important;
+    --toolbarbutton-active-background: rgba(255, 255, 255, 0.16) !important;
+  }
+
+  /* FOCUSED: scrims live on CHILD layers — -moz-window-titlebar native
+   * paint sits above CSS background-color on the toolbox itself, so a veil
+   * there is invisible. Children paint over the blur. The tab strip itself
+   * gets NO fill (a fill starts/stops mid-bar and reads as a box); tabs
+   * carry their own slabs, labels get shadow for legibility. The navbar
+   * gets a denser fill so toolbar + urlbar read as one dark unit. */
+  :root:not(:-moz-window-inactive) #nav-bar {
+    background-color: rgba(18, 18, 20, 0.62) !important;
+    box-shadow: 0 -2px 3px -3px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  /* selected tab: same fill as the navbar so tab + toolbar read as one
+   * surface; three-sided edge (no bottom leg — a bottom edge would sit
+   * directly above the urlbar and read as a border there) */
+  :root:not(:-moz-window-inactive)
+    #tabbrowser-tabs:not([noshadowfortests])
+    .tab-background:is([selected], [multiselected]) {
+    background-color: rgba(18, 18, 20, 0.62) !important;
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.2),
+      inset -1px 0 0 rgba(255, 255, 255, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 1px 3px rgba(0, 0, 0, 0.28) !important;
+  }
+
+  /* unselected-tab hover: whisper of light, keeps labels readable */
+  :root:not(:-moz-window-inactive)
+    #tabbrowser-tabs
+    .tab-background:not([selected], [multiselected]):hover {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  /* urlbar: theme field color (#121212) at readable translucency */
+  :root:not(:-moz-window-inactive) #urlbar-background,
+  :root:not(:-moz-window-inactive) #searchbar {
+    background-color: rgba(10, 10, 12, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+
+  /* labels: near-white, full strength — shadow (not a fill) keeps them
+   * legible over bright blur */
+  :root:not(:-moz-window-inactive) .tab-content {
+    color: #ececee !important;
+    opacity: 1 !important;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55) !important;
+  }
+  :root:not(:-moz-window-inactive) .tab-text {
+    opacity: 1 !important;
+  }
+
+  /* unselected tabs: no fill, no shadow — bare text on the blur, zero box */
+  :root:not(:-moz-window-inactive)
+    #tabbrowser-tabs
+    .tab-background:not([selected], [multiselected]) {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* INACTIVE: vibrancy is dead OS-side — and the native titlebar paint sits
+   * above toolbox backgrounds, so solids go on the same child layers that
+   * carry the focused scrims. Fully opaque theme colors, no blur gap. */
+  :root:-moz-window-inactive #navigator-toolbox {
+    background-color: #1e1e1e !important;
+  }
+  :root:-moz-window-inactive #TabsToolbar,
+  :root:-moz-window-inactive #titlebar,
+  :root:-moz-window-inactive #tabbrowser-tabs {
+    background-color: #161619 !important;
+  }
+  :root:-moz-window-inactive #tabbrowser-arrowscrollbox,
+  :root:-moz-window-inactive #nav-bar {
+    background-color: #161619 !important;
+  }
+  :root:-moz-window-inactive
+    #tabbrowser-tabs:not([noshadowfortests])
+    .tab-background:is([selected], [multiselected]) {
+    background-color: #2e2e2e !important;
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.14),
+      inset -1px 0 0 rgba(255, 255, 255, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+  /* inactive unselected tabs: no fill, no shadow — faint edge only, so the
+   * tab row reads as dormant, not muddy */
+  :root:-moz-window-inactive
+    #tabbrowser-tabs
+    .tab-background:not([selected], [multiselected]) {
+    background: transparent !important;
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08),
+      inset -1px 0 0 rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  }
+  :root:-moz-window-inactive #urlbar-background,
+  :root:-moz-window-inactive #searchbar {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+  }
+  :root:-moz-window-inactive .tab-content {
+    color: rgba(255, 255, 255, 0.72) !important;
+    opacity: 1 !important;
+  }
+  :root:-moz-window-inactive #nav-bar {
+    box-shadow: 0 -1px 0 0 rgba(255, 255, 255, 0.07) !important;
   }
 }

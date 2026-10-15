@@ -2,3 +2,16 @@
 #urlbar .search-one-offs:not([hidden]) {
   display: none !important;
 }
+
+/* ----- Hide the internal-page brand badge (Firefox logo + "Firefox" label)
+ * Shown only on secure internal pages: browser-siteIdentity.js sets
+ * #identity-box.className = "chromeUI" there and _refreshIdentityIcons()
+ * fills the label from brandShorterName. Verified in esr153
+ * (browser/base/content/browser-siteIdentity.js, navigator-toolbox.inc.xhtml:
+ * #identity-box > #identity-icon-box > #identity-icon + #identity-icon-label).
+ * Scoped to .chromeUI so HTTPS padlocks (verifiedDomain), extension pages,
+ * broken-cert warnings, and the permission icons sibling
+ * (#identity-permission-box) are untouched. */
+#identity-box.chromeUI > #identity-icon-box {
+  display: none !important;
+}
