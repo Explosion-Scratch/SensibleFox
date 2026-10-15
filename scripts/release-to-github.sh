@@ -68,6 +68,18 @@ if ! gh release view "$TAG" --json tagName >/dev/null 2>&1; then
     gh release create "$TAG" --title "$TAG" --generate-notes
 fi
 
+# Append the unsigned-install guide so every release explains Gatekeeper.
+# Single source: .github/release-notes-footer.md (also used by CI).
+FOOTER="$ROOT_DIR/.github/release-notes-footer.md"
+if [[ -f "$FOOTER" ]]; then
+    body=$(gh release view "$TAG" --json body --jq '.body')
+    if [[ "$body" != *"Installing unsigned builds"* ]]; then
+        printf '%s\n\n%s\n' "$body" "$(cat "$FOOTER")" > "$DIST/.release-notes.md"
+        gh release edit "$TAG" --notes-file "$DIST/.release-notes.md"
+        rm -f "$DIST/.release-notes.md"
+    fi
+fi
+
 # Retrieve release upload URL template
 upload_url_template=$(gh release view "$TAG" --json uploadUrl --jq '.uploadUrl' 2>/dev/null || true)
 [[ -n "$upload_url_template" ]] || die "Could not retrieve upload URL for release $TAG"

@@ -3146,6 +3146,9 @@ user_pref("browser.aboutaddons.novaThemesPickerEnabled", false);
 user_pref("browser.newtabpage.activity-stream.nova.enabled", false);
 user_pref("browser.urlbar.quicksuggest.ampTopPickUseNovaIconSize", false);
 user_pref("pdfjs.enableNova", false);
+// PDF viewer: no "NEW" badges (pdfjs.enableNewBadge gates span creation in
+// viewer.mjs), sidebar hidden on load but toggleable (SidebarView.NONE = 0)
+user_pref("pdfjs.enableNewBadge", false);
 
 // ═══════════════════════════════════════════
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
@@ -3168,7 +3171,7 @@ user_pref("layout.spellcheckDefault", 2);
 user_pref("ui.SpellCheckerUnderlineStyle", 1);
 user_pref("browser.bookmarks.max_backups", 5);
 user_pref("browser.toolbars.bookmarks.visibility", "never");
-user_pref("pdfjs.sidebarViewOnLoad", 1);
+user_pref("pdfjs.sidebarViewOnLoad", 0);
 user_pref("browser.helperApps.showOpenOptionForPdfJS", true);
 user_pref("browser.newtabpage.activity-stream.discoverystream.enabled", false);
 user_pref("browser.newtabpage.activity-stream.showSearch", true);
