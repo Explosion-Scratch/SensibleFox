@@ -3107,8 +3107,8 @@ defaultPref("browser.tabs.hoverPreview.showThumbnails", true);
 defaultPref("browser.tabs.groups.enabled", true);
 defaultPref("browser.tabs.insertAfterCurrent", true);
 defaultPref("browser.tabs.insertAfterCurrentExceptPinned", true);
-// macOS-expected: closing the last tab leaves a blank window (no quit).
-defaultPref("browser.tabs.closeWindowWithLastTab", false);
+// Cmd+W on the last tab closes the window (Firefox default).
+defaultPref("browser.tabs.closeWindowWithLastTab", true);
 defaultPref("browser.bookmarks.openInTabClosesMenu", false);
 defaultPref("browser.menu.showViewImageInfo", false);
 defaultPref("findbar.highlightAll", true);
@@ -3152,6 +3152,17 @@ defaultPref("pdfjs.enableNova", false);
 // PDF viewer: no "NEW" badges (pdfjs.enableNewBadge gates span creation in
 // viewer.mjs), sidebar hidden on load but toggleable (SidebarView.NONE = 0)
 defaultPref("pdfjs.enableNewBadge", false);
+
+// ═══════════════════════════════════════════
+// SETTINGS REDESIGN — keep the new look, kill the promo banner
+// browser.settings-redesign.enabled is the master switch (default true
+// FF152+); promo.dismissed suppresses the "settings has a new look"
+// moz-promo shown atop every pane (SettingPaneManager.shouldShowRedesignPromo
+// = srdEnabled && !srdPromoDismissed). Nova stays off above — classic
+// chrome, new settings.
+// ═══════════════════════════════════════════
+defaultPref("browser.settings-redesign.enabled", true);
+defaultPref("browser.settings-redesign.promo.dismissed", true);
 
 // ═══════════════════════════════════════════
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
@@ -3261,6 +3272,21 @@ defaultPref("browser.tabs.warnOnOpen", false);
 defaultPref("browser.sessionstore.warnOnQuit", false);
 defaultPref("general.warnOnAboutConfig", false);
 defaultPref("browser.aboutConfig.showWarning", false);
+
+// ═══════════════════════════════════════════
+// UPDATES — fully manual, zero notices
+// No background checks/downloads/staging: the user updates via
+// About Firefox (or a fresh SensibleFox install) on their own schedule.
+// badgeWaitTime/promptWaitTime stay maxed as belt-and-braces for any
+// update that was already staged before this flipped.
+// ═══════════════════════════════════════════
+defaultPref("app.update.auto", false);
+defaultPref("app.update.staging.enabled", false);
+defaultPref("app.update.service.enabled", false);
+defaultPref("app.update.silent", false);
+defaultPref("app.update.notifyDuringDownload", false);
+defaultPref("app.update.badgeWaitTime", 315360000);
+defaultPref("app.update.promptWaitTime", 315360000);
 
 // ═══════════════════════════════════════════
 // CUSTOMIZATION ENABLEMENT — userChrome, SVG, toolbar layout

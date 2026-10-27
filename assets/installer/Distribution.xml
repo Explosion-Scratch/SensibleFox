@@ -3,20 +3,51 @@
     <title>SensibleFox</title>
     <welcome file="welcome.html" mime-type="text/html"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
-    <options customize="never" allow-external-scripts="no" rootVolumeOnly="true"/>
+    <options customize="allow" allow-external-scripts="no" rootVolumeOnly="true"/>
     <volume-check>
         <allowed-os-versions>
             <os-version min="11.0"/>
         </allowed-os-versions>
     </volume-check>
+    <!-- Profile setup: three mutually exclusive install options. Each wraps
+         a tiny marker component (payload: one file recording the choice);
+         postinstall forwards the selected marker to the CLI as profile mode.
+         Exactly one should be selected; postinstall and the CLI both fall
+         back to sensiblefox when the record is missing. -->
     <choices-outline>
-        <line choice="default">
-            <line choice="{{PKG_IDENTIFIER}}"/>
+        <line choice="profile-setup">
+            <line choice="profile-existing"/>
+            <line choice="profile-sensiblefox"/>
+            <line choice="profile-firefox"/>
         </line>
+        <line choice="main"/>
     </choices-outline>
-    <choice id="default"/>
-    <choice id="{{PKG_IDENTIFIER}}" visible="false">
+    <choice id="profile-setup"
+        title="Firefox profile setup"
+        description="How SensibleFox should set up your Firefox profile. Select exactly one option."/>
+    <choice id="profile-existing"
+        title="Modify existing Firefox profile"
+        description="Apply SensibleFox settings to your current default Firefox profile. No new profile is created."
+        start_selected="false">
+        <pkg-ref id="{{PKG_MODE_EXISTING}}"/>
+    </choice>
+    <choice id="profile-sensiblefox"
+        title="New profile SensibleFox"
+        description="Create a fresh profile registered as SensibleFox and make it the default. Keeps stock and SensibleFox settings separate."
+        start_selected="true">
+        <pkg-ref id="{{PKG_MODE_SENSIBLEFOX}}"/>
+    </choice>
+    <choice id="profile-firefox"
+        title="New profile Firefox"
+        description="Create a fresh profile registered as Firefox and make it the default."
+        start_selected="false">
+        <pkg-ref id="{{PKG_MODE_FIREFOX}}"/>
+    </choice>
+    <choice id="main" visible="false">
         <pkg-ref id="{{PKG_IDENTIFIER}}"/>
     </choice>
-    <pkg-ref id="{{PKG_IDENTIFIER}}" version="{{PKG_VERSION}}" onConclusion="none">component.pkg</pkg-ref>
+    <pkg-ref id="{{PKG_IDENTIFIER}}" version="{{PKG_VERSION}}" onConclusion="none">{{COMPONENT_PKG}}</pkg-ref>
+    <pkg-ref id="{{PKG_MODE_EXISTING}}" version="{{PKG_VERSION}}" onConclusion="none">{{COMPONENT_MODE_EXISTING}}</pkg-ref>
+    <pkg-ref id="{{PKG_MODE_SENSIBLEFOX}}" version="{{PKG_VERSION}}" onConclusion="none">{{COMPONENT_MODE_SENSIBLEFOX}}</pkg-ref>
+    <pkg-ref id="{{PKG_MODE_FIREFOX}}" version="{{PKG_VERSION}}" onConclusion="none">{{COMPONENT_MODE_FIREFOX}}</pkg-ref>
 </installer-gui-script>

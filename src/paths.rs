@@ -35,6 +35,22 @@ pub const UBLOCK_XPI_URL: &str = concat!(
 // ── IDs ──────────────────────────────────────────────────────────────────
 pub const UBLOCK_ID: &str = "uBlock0@raymondhill.net";
 pub const PROFILE_NAME: &str = "sensiblefox";
+/// Profile directory name for `--profile-mode firefox`.
+pub const PROFILE_NAME_FIREFOX: &str = "firefox";
+/// Display names written to profiles.ini for freshly created profiles.
+pub const PROFILE_DISPLAY_SENSIBLEFOX: &str = "SensibleFox";
+pub const PROFILE_DISPLAY_FIREFOX: &str = "Firefox";
+
+/// Marker file written inside every SensibleFox-managed profile directory.
+/// Lets discovery recognize managed profiles regardless of directory name
+/// (e.g. the `firefox` dir from `--profile-mode firefox`).
+pub const MANAGED_MARKER: &str = ".sensiblefox-managed";
+
+/// Installer-side record of the PKG Customize-pane profile choice.
+/// Written by the selected `com.sensiblefox.firefox.mode.*` marker component;
+/// read by postinstall and forwarded to the CLI as `--profile-mode`.
+pub const INSTALL_PROFILE_MODE_FILE: &str =
+    "/Library/Application Support/SensibleFox/profile-mode";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 pub fn join_home(home: &Path, rel: &str) -> PathBuf {

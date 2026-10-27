@@ -63,6 +63,7 @@ Running `sensiblefox` with no flags performs the exact same install the PKG does
 | `--no-policies`     | Skip the macOS Firefox policy plist                                                    |
 | `--profile-only`    | Configure the profile without launching Firefox                                        |
 | `--replace-firefox` | Reinstall Firefox even when a valid copy is already present                            |
+| `--profile-mode`    | Which profile to configure: `existing` (modify the current default Firefox profile in place), `sensiblefox` (new profile registered as SensibleFox), or `firefox` (new profile registered as Firefox). Same three options as the PKG Customize pane. |
 | `--update-upstream` | Re-fetch Betterfox/arkenfox prefs into `generated/`                                    |
 | `--clean`           | Interactively pick which SensibleFox profiles, policies, and managed storage to delete |
 

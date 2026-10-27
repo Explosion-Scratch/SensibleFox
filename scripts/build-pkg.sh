@@ -4,14 +4,24 @@ set -euo pipefail
 # SensibleFox — Build macOS .pkg installer(s)
 #
 # Produces:
-#   dist/SensibleFox.pkg           — small online installer (downloads Firefox)
+#   dist/SensibleFox-universal.pkg (+ -aarch64/-x86_64) — small online
+#                                    installers (download Firefox)
 #   dist/SensibleFox-Offline.pkg   — when BUNDLE_FIREFOX=1; pre-stages
 #                                    Firefox.app directly into /Applications
 #                                    so pkgbuild extracts it in one shot —
 #                                    NO postinstall download / mount / copy.
 #
-# Both PKGs share a single postinstall template that just runs the Rust CLI
-# in two phases (root: install + policies, user: profile + extensions).
+# Every PKG is a product archive with a Customize pane offering three
+# profile options (native Distribution choices, one selected by default):
+#   - Modify existing Firefox profile (in place, no new profile)
+#   - New profile registered as SensibleFox (default)
+#   - New profile registered as Firefox
+# Each option is a tiny marker component recording the choice at
+# /Library/Application Support/SensibleFox/profile-mode; postinstall
+# forwards it to the CLI as --profile-mode.
+#
+# The main payload + postinstall template run the Rust CLI in two phases
+# (root: install + policies, user: profile + extensions).
 #
 # Env knobs:
 #   FIREFOX_LANG, PKG_VERSION, PKG_IDENTIFIER
@@ -32,6 +42,17 @@ PKG_IDENTIFIER="${PKG_IDENTIFIER:-com.sensiblefox.firefox}"
 SUPPORT_DIR="/Library/Application Support/SensibleFox"
 HELPER_APP_NAME="SensibleFox Installer.app"
 HELPER_APP_REL="$SUPPORT_DIR/$HELPER_APP_NAME"
+
+# Customize-pane profile options. Each gets a tiny marker component recording
+# the choice at $SUPPORT_DIR/profile-mode; postinstall forwards it as
+# --profile-mode. Marker payloads are arch-independent: built once, shared by
+# every PKG this script produces.
+MODE_EXISTING_ID="${PKG_IDENTIFIER}.mode.existing"
+MODE_SENSIBLEFOX_ID="${PKG_IDENTIFIER}.mode.sensiblefox"
+MODE_FIREFOX_ID="${PKG_IDENTIFIER}.mode.firefox"
+MODE_COMPONENT_EXISTING="component-mode-existing.pkg"
+MODE_COMPONENT_SENSIBLEFOX="component-mode-sensiblefox.pkg"
+MODE_COMPONENT_FIREFOX="component-mode-firefox.pkg"
 
 FIREFOX_DMG_URL="https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=osx&lang=$FIREFOX_LANG"
 VERSION_URL="https://product-details.mozilla.org/1.0/firefox_versions.json"
@@ -224,11 +245,22 @@ if [ -z "\$CONSOLE_USER" ] || [ -z "\$CONSOLE_UID" ]; then
 fi
 
 # Phase 2 (user): build the SensibleFox profile + extensions.
-/bin/launchctl asuser "\$CONSOLE_UID" \\
-    /usr/bin/sudo -u "\$CONSOLE_USER" -H \\
-    /usr/bin/env -u SUDO_USER -u SUDO_COMMAND -u SUDO_GID -u SUDO_UID \\
-    "\$SCRIPTS_DIR/sensiblefox" \\
-        --unattended --profile-only --no-policies --status-file "\$STATUS" &
+# Profile mode comes from the Customize pane: the selected mode marker
+# component recorded it at $SUPPORT_DIR/profile-mode (baked at build time).
+# A missing/unknown record falls back to sensiblefox (the start_selected
+# default); the CLI double-checks the same file as a fallback.
+MODE_ARGS="--profile-mode sensiblefox"
+if [ -f "$SUPPORT_DIR/profile-mode" ]; then
+    SAVED_MODE="\$(/usr/bin/tr '[:upper:]' '[:lower:]' < "$SUPPORT_DIR/profile-mode" | /usr/bin/tr -d '[:space:]' || true)"
+    case "\$SAVED_MODE" in
+        existing|sensiblefox|firefox) MODE_ARGS="--profile-mode \$SAVED_MODE" ;;
+    esac
+fi
+/bin/launchctl asuser "\$CONSOLE_UID" \
+    /usr/bin/sudo -u "\$CONSOLE_USER" -H \
+    /usr/bin/env -u SUDO_USER -u SUDO_COMMAND -u SUDO_GID -u SUDO_UID \
+    "\$SCRIPTS_DIR/sensiblefox" \
+        --unattended --profile-only --no-policies --status-file "\$STATUS" \$MODE_ARGS &
 SF_PID=\$!
 wait \$SF_PID
 SF_PID=
@@ -247,6 +279,32 @@ fi
 exit 0
 POSTINSTALL
     chmod 755 "$scripts_dir/postinstall"
+}
+
+build_marker_pkgs() {
+    # One tiny component per Customize-pane profile option. Each payload is
+    # a single file recording the choice; only the selected option's
+    # component installs, so postinstall can read exactly one record.
+    # Arch-independent — built once, shared by every PKG below.
+    local mode id comp root
+    for mode in existing sensiblefox firefox; do
+        case "$mode" in
+            existing) id="$MODE_EXISTING_ID"; comp="$MODE_COMPONENT_EXISTING" ;;
+            sensiblefox) id="$MODE_SENSIBLEFOX_ID"; comp="$MODE_COMPONENT_SENSIBLEFOX" ;;
+            firefox) id="$MODE_FIREFOX_ID"; comp="$MODE_COMPONENT_FIREFOX" ;;
+        esac
+        root="$DIST_DIR/marker-root-$mode"
+        rm -rf "$root"
+        mkdir -p "$root$SUPPORT_DIR"
+        printf '%s\n' "$mode" > "$root$SUPPORT_DIR/profile-mode"
+        pkgbuild \
+            --root "$root" \
+            --identifier "$id" \
+            --version "$PKG_VERSION" \
+            --install-location "/" \
+            "$DIST_DIR/$comp" > /dev/null
+        rm -rf "$root"
+    done
 }
 
 build_pkg() {
@@ -291,8 +349,14 @@ build_pkg() {
     /usr/bin/sed \
         -e "s/{{PKG_IDENTIFIER}}/$identifier/g" \
         -e "s/{{PKG_VERSION}}/$PKG_VERSION/g" \
+        -e "s/{{PKG_MODE_EXISTING}}/$MODE_EXISTING_ID/g" \
+        -e "s/{{PKG_MODE_SENSIBLEFOX}}/$MODE_SENSIBLEFOX_ID/g" \
+        -e "s/{{PKG_MODE_FIREFOX}}/$MODE_FIREFOX_ID/g" \
+        -e "s|{{COMPONENT_PKG}}|$(basename "$component")|g" \
+        -e "s|{{COMPONENT_MODE_EXISTING}}|$MODE_COMPONENT_EXISTING|g" \
+        -e "s|{{COMPONENT_MODE_SENSIBLEFOX}}|$MODE_COMPONENT_SENSIBLEFOX|g" \
+        -e "s|{{COMPONENT_MODE_FIREFOX}}|$MODE_COMPONENT_FIREFOX|g" \
         "$INSTALLER_DIR/Distribution.xml" \
-        | /usr/bin/sed "s|component.pkg|$(basename "$component")|g" \
         > "$dist_xml"
 
     productbuild \
@@ -308,6 +372,10 @@ build_pkg() {
 
     rm -f "$component" "$dist_xml"
 }
+
+# ── Build the profile-mode marker components (Customize-pane choices) ──
+echo "  → Building profile-mode marker components..."
+build_marker_pkgs
 
 # ── Build the online pkgs ────────────────────────────────────────────────
 echo "  → Building online .pkgs..."
@@ -401,6 +469,10 @@ if [ "${BUNDLE_FIREFOX:-0}" = "1" ]; then
     OFF_SIZE=$(du -h "$OFF_PKG" | cut -f1 | tr -d ' ')
     echo "  ✓ Built dist/SensibleFox-Offline.pkg ($OFF_SIZE) — Firefox $FF_VERSION pre-staged"
 fi
+
+# Marker components are referenced by every Distribution and must not ship
+# loose in dist/.
+rm -f "$DIST_DIR/$MODE_COMPONENT_EXISTING" "$DIST_DIR/$MODE_COMPONENT_SENSIBLEFOX" "$DIST_DIR/$MODE_COMPONENT_FIREFOX"
 
 echo ""
 echo ""

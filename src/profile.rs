@@ -62,13 +62,26 @@ pub fn firefox_root() -> Option<PathBuf> {
 }
 
 pub fn default_profile_path() -> PathBuf {
+    default_profile_path_for(PROFILE_NAME)
+}
+
+pub fn default_profile_path_for(dir_name: &str) -> PathBuf {
     firefox_root()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("Profiles")
-        .join(PROFILE_NAME)
+        .join(dir_name)
 }
 
 pub fn is_sensiblefox_profile(path: &Path) -> bool {
+    // Marker file is the reliable signal (covers any directory name, e.g.
+    // the `firefox` dir from `--profile-mode firefox`). Name matching is a
+    // fallback for profiles created before the marker existed. A bare dir
+    // named `firefox` is deliberately NOT matched: stock Firefox never
+    // creates one, and misclassifying a user profile would be worse than
+    // missing a managed one (the marker always exists going forward).
+    if path.join(paths::MANAGED_MARKER).exists() {
+        return true;
+    }
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else { return false };
     name == PROFILE_NAME || name.starts_with(PROFILE_NAME) || name.ends_with(".sensiblefox")
 }
@@ -80,7 +93,7 @@ pub fn discover_profiles() -> Vec<PathBuf> {
     if let Ok(rd) = fs::read_dir(&profiles_dir) {
         for entry in rd.flatten() {
             let p = entry.path();
-            if is_sensiblefox_profile(&p) {
+            if p.is_dir() && is_sensiblefox_profile(&p) && !out.contains(&p) {
                 out.push(p);
             }
         }
@@ -109,11 +122,19 @@ pub fn create(profile_path: &Path) -> Result<(), String> {
     fs::create_dir_all(&ext_dir)
         .map_err(|e| format!("failed to create extensions directory: {e}"))?;
 
+    // Stamp the profile as SensibleFox-managed so discovery recognizes it
+    // regardless of directory name. Best-effort: a missing marker only
+    // affects future discovery, never the install itself.
+    let marker = profile_path.join(paths::MANAGED_MARKER);
+    if !marker.exists() {
+        let _ = fs::write(&marker, "sensiblefox-managed\n");
+    }
+
     println!("  {} Profile directory created", style("✓").green());
     Ok(())
 }
 
-pub fn register_default(profile_path: &Path, firefox_binary: Option<&Path>) {
+pub fn register_default(profile_path: &Path, firefox_binary: Option<&Path>, display_name: &str) {
     let Some(root) = firefox_root() else { return };
     let Ok(rel) = profile_path.strip_prefix(&root) else {
         eprintln!(
@@ -134,7 +155,7 @@ pub fn register_default(profile_path: &Path, firefox_binary: Option<&Path>) {
 
     let profiles_ini = root.join("profiles.ini");
     let mut ini = read_ini(&profiles_ini);
-    upsert_profile(&mut ini, &rel_str);
+    upsert_profile(&mut ini, &rel_str, display_name);
     if let Some(bin) = firefox_binary {
         if let Some(parent) = install_parent_directory_for_hash(bin) {
             let hash_hex = mozilla_install_hash_hex(&parent);
@@ -279,7 +300,7 @@ fn remove(kv: &mut Vec<(String, String)>, key: &str) {
     kv.retain(|(k, _)| k != key);
 }
 
-fn upsert_profile(ini: &mut Ini, rel_path: &str) {
+fn upsert_profile(ini: &mut Ini, rel_path: &str, display_name: &str) {
     let mut found = false;
     for (name, kv) in ini.sections.iter_mut() {
         if !name.starts_with("Profile") {
@@ -287,7 +308,11 @@ fn upsert_profile(ini: &mut Ini, rel_path: &str) {
         }
         let is_ours = get(kv, "Path") == Some(rel_path);
         if is_ours {
-            set(kv, "Name", PROFILE_NAME);
+            // Preserve an existing Name (e.g. a stock profile's name when
+            // re-registering); only name freshly created sections.
+            if get(kv, "Name").is_none() {
+                set(kv, "Name", display_name);
+            }
             set(kv, "IsRelative", "1");
             set(kv, "Path", rel_path);
             set(kv, "Default", "1");
@@ -301,7 +326,7 @@ fn upsert_profile(ini: &mut Ini, rel_path: &str) {
         ini.sections.push((
             format!("Profile{}", idx),
             vec![
-                ("Name".into(), PROFILE_NAME.into()),
+                ("Name".into(), display_name.into()),
                 ("IsRelative".into(), "1".into()),
                 ("Path".into(), rel_path.into()),
                 ("Default".into(), "1".into()),

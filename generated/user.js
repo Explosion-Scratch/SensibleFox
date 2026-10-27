@@ -3104,8 +3104,8 @@ user_pref("browser.tabs.hoverPreview.showThumbnails", true);
 user_pref("browser.tabs.groups.enabled", true);
 user_pref("browser.tabs.insertAfterCurrent", true);
 user_pref("browser.tabs.insertAfterCurrentExceptPinned", true);
-// macOS-expected: closing the last tab leaves a blank window (no quit).
-user_pref("browser.tabs.closeWindowWithLastTab", false);
+// Cmd+W on the last tab closes the window (Firefox default).
+user_pref("browser.tabs.closeWindowWithLastTab", true);
 user_pref("browser.bookmarks.openInTabClosesMenu", false);
 user_pref("browser.menu.showViewImageInfo", false);
 user_pref("findbar.highlightAll", true);
@@ -3149,6 +3149,17 @@ user_pref("pdfjs.enableNova", false);
 // PDF viewer: no "NEW" badges (pdfjs.enableNewBadge gates span creation in
 // viewer.mjs), sidebar hidden on load but toggleable (SidebarView.NONE = 0)
 user_pref("pdfjs.enableNewBadge", false);
+
+// ═══════════════════════════════════════════
+// SETTINGS REDESIGN — keep the new look, kill the promo banner
+// browser.settings-redesign.enabled is the master switch (default true
+// FF152+); promo.dismissed suppresses the "settings has a new look"
+// moz-promo shown atop every pane (SettingPaneManager.shouldShowRedesignPromo
+// = srdEnabled && !srdPromoDismissed). Nova stays off above — classic
+// chrome, new settings.
+// ═══════════════════════════════════════════
+user_pref("browser.settings-redesign.enabled", true);
+user_pref("browser.settings-redesign.promo.dismissed", true);
 
 // ═══════════════════════════════════════════
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
@@ -3258,6 +3269,21 @@ user_pref("browser.tabs.warnOnOpen", false);
 user_pref("browser.sessionstore.warnOnQuit", false);
 user_pref("general.warnOnAboutConfig", false);
 user_pref("browser.aboutConfig.showWarning", false);
+
+// ═══════════════════════════════════════════
+// UPDATES — fully manual, zero notices
+// No background checks/downloads/staging: the user updates via
+// About Firefox (or a fresh SensibleFox install) on their own schedule.
+// badgeWaitTime/promptWaitTime stay maxed as belt-and-braces for any
+// update that was already staged before this flipped.
+// ═══════════════════════════════════════════
+user_pref("app.update.auto", false);
+user_pref("app.update.staging.enabled", false);
+user_pref("app.update.service.enabled", false);
+user_pref("app.update.silent", false);
+user_pref("app.update.notifyDuringDownload", false);
+user_pref("app.update.badgeWaitTime", 315360000);
+user_pref("app.update.promptWaitTime", 315360000);
 
 // ═══════════════════════════════════════════
 // CUSTOMIZATION ENABLEMENT — userChrome, SVG, toolbar layout

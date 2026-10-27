@@ -255,6 +255,56 @@ fn prompt_extend_source(profiles: &[(String, PathBuf)]) -> Result<PathBuf, Strin
     Ok(profiles[selection].1.clone())
 }
 
+/// Resolve the stock Firefox profile that `--profile-mode existing` should
+/// configure in place: the `Default=1` section of profiles.ini when present,
+/// otherwise the first non-SensibleFox profile. Returns (name, path).
+pub fn default_firefox_profile() -> Option<(String, PathBuf)> {
+    let profiles = discover_firefox_profiles();
+    if profiles.is_empty() {
+        return None;
+    }
+    if profiles.len() == 1 {
+        return Some(profiles.into_iter().next().unwrap());
+    }
+    // Prefer the profile Firefox itself marks Default=1.
+    if let Some(root) = crate::profile::firefox_root() {
+        let text = fs::read_to_string(root.join("profiles.ini")).unwrap_or_default();
+        let mut sections: Vec<(String, Vec<(String, String)>)> = Vec::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.starts_with('[') && line.ends_with(']') {
+                sections.push((line[1..line.len() - 1].to_string(), Vec::new()));
+            } else if let Some((k, v)) = line.split_once('=') {
+                if let Some(last) = sections.last_mut() {
+                    last.1.push((k.trim().to_string(), v.trim().to_string()));
+                }
+            }
+        }
+        for (name, kv) in &sections {
+            if !name.starts_with("Profile") {
+                continue;
+            }
+            let is_default = kv.iter().any(|(k, v)| k == "Default" && v == "1");
+            if !is_default {
+                continue;
+            }
+            let rel = kv.iter().find(|(k, _)| k == "Path").map(|(_, v)| v.as_str());
+            let is_rel = kv
+                .iter()
+                .find(|(k, _)| k == "IsRelative")
+                .map(|(_, v)| v == "1")
+                .unwrap_or(true);
+            if let Some(rel) = rel {
+                let resolved = resolve_profile_path(&root, rel, is_rel);
+                if let Some(hit) = profiles.iter().find(|(_, p)| *p == resolved) {
+                    return Some(hit.clone());
+                }
+            }
+        }
+    }
+    Some(profiles.into_iter().next().unwrap())
+}
+
 /// Prompt interactively for what data to extend.
 pub fn prompt_selections() -> Result<Vec<ExtendSelection>, String> {
     use dialoguer::{theme::ColorfulTheme, MultiSelect};

@@ -54,6 +54,15 @@
     font-size: 11px;
     margin-top: 14px;
   }
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #f5f5f7; }
+    .sub { color: #a1a1a6; }
+    .version { background: #38383c; color: #f5f5f7; }
+    .sizes .label { color: #a1a1a6; }
+    .sizes .num { color: #f5f5f7; }
+    .meta { color: #98989d; }
+  }
 </style>
 </head>
 <body>

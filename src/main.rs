@@ -11,10 +11,25 @@ mod uninstall;
 mod upstream;
 
 use crate::progress::Progress;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+/// Which Firefox profile SensibleFox configures. Mirrors the three choices
+/// in the PKG Customize pane (the selected marker component is forwarded by
+/// postinstall as `--profile-mode <value>`).
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ProfileMode {
+    /// Apply SensibleFox settings to the current default Firefox profile in
+    /// place. No new profile is created; profiles.ini registration is left
+    /// untouched.
+    Existing,
+    /// Create (or update) a new profile registered as `SensibleFox`.
+    Sensiblefox,
+    /// Create (or update) a new profile registered as `Firefox`.
+    Firefox,
+}
 
 #[derive(Parser)]
 #[command(name = "sensiblefox", version)]
@@ -55,6 +70,14 @@ struct Cli {
     /// Custom profile output path
     #[arg(long, hide = true)]
     profile_path: Option<PathBuf>,
+
+    /// Which profile to configure: `existing` (modify the current default
+    /// Firefox profile in place), `sensiblefox` (new profile registered as
+    /// SensibleFox), or `firefox` (new profile registered as Firefox).
+    /// Explicit --profile-path wins when both are given. Unset = current
+    /// interactive behavior (prompt when managed profiles already exist).
+    #[arg(long, value_enum)]
+    profile_mode: Option<ProfileMode>,
 
     /// Install Firefox + policies only; skip user profile (installer use)
     #[arg(long, hide = true)]
@@ -205,18 +228,55 @@ fn run_install(mut cli: Cli) {
     let mut final_profile_path = cli.profile_path.clone().unwrap_or_else(|| default_path.clone());
     let mut just_launch = false;
     let mut interactive_create = false;
+    // profiles.ini display name when this run should (re-)register the
+    // profile as default. None = leave registration untouched (explicit
+    // --profile-path, or --profile-mode existing which is already default).
+    let mut register_display: Option<&'static str> = None;
+
+    let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
+    let steps = firefox::step_indexes();
 
     if cli.profile_path.is_none() && !cli.system_only {
-        let existing = profile::discover_profiles();
-        if !existing.is_empty() {
-            if !cli.unattended && cli.status_file.is_none() {
-                let (chosen, launch_only, is_new) = prompt_existing_profile(&existing, &default_path);
-                final_profile_path = chosen;
-                just_launch = launch_only;
-                interactive_create = is_new;
+        // Unattended installer runs without --profile-mode (e.g. postinstall
+        // from an older PKG) still honor the Customize-pane marker when it
+        // exists. An explicit flag always wins over the marker file.
+        if cli.profile_mode.is_none() && (cli.unattended || cli.status_file.is_some()) {
+            cli.profile_mode = read_installer_profile_mode();
+        }
+        match cli.profile_mode {
+            // PKG Customize-pane / headless choice: deterministic, no prompts.
+            Some(ProfileMode::Existing) => {
+                let interactive = !cli.unattended && cli.status_file.is_none();
+                match resolve_mode_existing(interactive) {
+                    Ok(p) => final_profile_path = p,
+                    Err(e) => fail(&progress, "No existing Firefox profile found", &e),
+                }
             }
-        } else if cli.status_file.is_none() && !cli.unattended {
-            interactive_create = true;
+            Some(ProfileMode::Sensiblefox) => {
+                final_profile_path = profile::default_profile_path();
+                register_display = Some(paths::PROFILE_DISPLAY_SENSIBLEFOX);
+            }
+            Some(ProfileMode::Firefox) => {
+                final_profile_path = profile::default_profile_path_for(paths::PROFILE_NAME_FIREFOX);
+                register_display = Some(paths::PROFILE_DISPLAY_FIREFOX);
+            }
+            None => {
+                let existing = profile::discover_profiles();
+                if !existing.is_empty() {
+                    if !cli.unattended && cli.status_file.is_none() {
+                        let (chosen, launch_only, is_new) =
+                            prompt_existing_profile(&existing, &default_path);
+                        final_profile_path = chosen;
+                        just_launch = launch_only;
+                        interactive_create = is_new;
+                    }
+                } else if cli.status_file.is_none() && !cli.unattended {
+                    interactive_create = true;
+                }
+                if using_default_path {
+                    register_display = Some(paths::PROFILE_DISPLAY_SENSIBLEFOX);
+                }
+            }
         }
     }
 
@@ -241,8 +301,6 @@ fn run_install(mut cli: Cli) {
 
     let profile_path = final_profile_path;
     let updating_existing_profile = profile_path.exists();
-    let progress = Progress::new(cli.status_file.clone(), firefox::install_step_list());
-    let steps = firefox::step_indexes();
 
     // Fast path: reuse an existing profile, just relaunch.
     if just_launch {
@@ -343,9 +401,9 @@ fn run_install(mut cli: Cli) {
     progress.step(steps.ublock, "Installing uBlock Origin");
     extensions::install_ublock(&profile_path, &progress);
 
-    if using_default_path {
+    if let Some(display) = register_display {
         progress.step(steps.register, "Registering default profile");
-        profile::register_default(&profile_path, Some(firefox_path.as_path()));
+        profile::register_default(&profile_path, Some(firefox_path.as_path()), display);
     }
 
     fix_user_ownership(&profile_path);
@@ -426,6 +484,60 @@ fn clean_stale_profile_config(profile_path: &Path, progress: &Progress) {
                     filename
                 );
             }
+        }
+    }
+}
+
+/// Read the PKG Customize-pane choice recorded by the selected
+/// `com.sensiblefox.firefox.mode.*` marker component. Returns None when the
+/// file is absent or holds an unknown value (fresh/CLI installs).
+fn read_installer_profile_mode() -> Option<ProfileMode> {
+    let text = std::fs::read_to_string(paths::INSTALL_PROFILE_MODE_FILE).ok()?;
+    match text.trim().to_lowercase().as_str() {
+        "existing" => Some(ProfileMode::Existing),
+        "sensiblefox" => Some(ProfileMode::Sensiblefox),
+        "firefox" => Some(ProfileMode::Firefox),
+        _ => None,
+    }
+}
+
+/// Resolve `--profile-mode existing`: the stock Firefox profile to configure
+/// in place. Unattended (PKG user phase) picks Firefox's own Default=1
+/// profile, else the first stock profile, and errors when none exist.
+/// Interactive terminal runs prompt when several stock profiles exist.
+fn resolve_mode_existing(interactive: bool) -> Result<PathBuf, String> {
+    if !interactive {
+        return extend::default_firefox_profile()
+            .map(|(_, p)| p)
+            .ok_or_else(|| {
+                "no stock Firefox profiles found under ~/Library/Application Support/Firefox. \
+                 Install Firefox and run it once first, or pick a SensibleFox profile option instead."
+                    .to_string()
+            });
+    }
+    let candidates = extend::discover_firefox_profiles();
+    match candidates.len() {
+        0 => Err("no stock Firefox profiles found.".to_string()),
+        1 => Ok(candidates.into_iter().next().unwrap().1),
+        _ => {
+            use dialoguer::{theme::ColorfulTheme, Select};
+            let items: Vec<String> = candidates
+                .iter()
+                .map(|(name, path)| {
+                    format!(
+                        "{} ({})",
+                        name,
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    )
+                })
+                .collect();
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Which Firefox profile should SensibleFox configure?")
+                .default(0)
+                .items(&items)
+                .interact()
+                .map_err(|e| format!("selection failed: {e}"))?;
+            Ok(candidates[selection].1.clone())
         }
     }
 }

@@ -57,12 +57,14 @@ echo ""
 [ -f "$GEN_DIR/user.js" ]                    || { echo "  ✗ generated/user.js missing. Run ./scripts/generate-prefs.sh"; exit 1; }
 [ -f "$GEN_DIR/sensiblefox-defaults.js" ]    || { echo "  ✗ generated/sensiblefox-defaults.js missing. Run ./scripts/generate-prefs.sh"; exit 1; }
 [ -f "$ASSETS_DIR/policies.json" ]           || { echo "  ✗ assets/policies.json missing."; exit 1; }
-# NOTE: the DMG ships policies-dmg.json (= policies.json + DisableAppUpdate).
+# NOTE: the DMG ships policies-dmg.json (= policies.json + ManualAppUpdateOnly).
 # Mozilla self-update would overwrite our branded Info.plist and silently
 # un-brand the app (updater.cpp: complete updates remove every precomplete-
-# listed file, and Info.plist ships in every MAR). So the branded app must
-# never self-update; ESR point releases arrive via a rebuilt DMG / reinstall.
-# The PKG/CLI path installs stock Firefox and keeps self-update enabled.
+# listed file, and Info.plist ships in every MAR). So the branded app never
+# auto-updates or prompts; updates only appear when the user opens
+# Settings > General, and installing one from there still de-brands —
+# ESR point releases should arrive via a rebuilt DMG / reinstall.
+# The PKG/CLI path is manual-only too (same policy in policies.json).
 [ -f "$ASSETS_DIR/policies-dmg.json" ]       || { echo "  ✗ assets/policies-dmg.json missing."; exit 1; }
 [ -f "$ASSETS_DIR/autoconfig.js" ]           || { echo "  ✗ assets/autoconfig.js missing."; exit 1; }
 [ -f "$ASSETS_DIR/sensiblefox.cfg.tail" ]    || { echo "  ✗ assets/sensiblefox.cfg.tail missing."; exit 1; }
@@ -174,20 +176,21 @@ echo "    uBlock Origin installed to distribution/extensions/"
 # be re-signed under our own identity. Renaming (rather than shipping a
 # second "Firefox.app") avoids clobbering a user's stock Firefox in
 # /Applications and gives the branded app its own Dock identity.
-echo "  → Branding: $SENSIBLEFOX_APP_NAME.app..."
 BRANDED_APP="$STAGING/$SENSIBLEFOX_APP_NAME.app"
-mv "$STAGING/Firefox.app" "$BRANDED_APP"
 PLIST="$BRANDED_APP/Contents/Info.plist"
 set_or_add() {
-    # $1 = plist key, $2 = type, $3 = value. Mozilla's Info.plist may not
-    # contain every key (CFBundleDisplayName is absent upstream) — and
-    # under `set -e` a bare `Set` failure would abort the whole build.
     /usr/libexec/PlistBuddy -c "Set :$1 '$3'" "$PLIST" 2>/dev/null \
         || /usr/libexec/PlistBuddy -c "Add :$1 $2 '$3'" "$PLIST"
 }
-set_or_add CFBundleName string "$SENSIBLEFOX_APP_NAME"
-set_or_add CFBundleDisplayName string "$SENSIBLEFOX_APP_NAME"
-set_or_add CFBundleIdentifier string "$SENSIBLEFOX_BUNDLE_ID"
+if [ "$SENSIBLEFOX_APP_NAME" = "Firefox" ]; then
+    echo "  (keeping upstream Firefox.app name + stock Info.plist)"
+else
+    echo "  → Branding: $SENSIBLEFOX_APP_NAME.app..."
+    mv "$STAGING/Firefox.app" "$BRANDED_APP"
+    set_or_add CFBundleName string "$SENSIBLEFOX_APP_NAME"
+    set_or_add CFBundleDisplayName string "$SENSIBLEFOX_APP_NAME"
+    set_or_add CFBundleIdentifier string "$SENSIBLEFOX_BUNDLE_ID"
+fi
 
 # ── Custom icon — baked into the bundle (not Finder Get-Info pasting,
 # which lives in a fragile resource-fork xattr and resets). Must run before
@@ -246,8 +249,12 @@ ln -sfn /Applications "$STAGING/Applications"
 mkdir -p "$STAGING/.background"
 cp "$ASSETS_DIR/dmg-background.png" "$STAGING/.background/background.png"
 /usr/bin/SetFile -a V "$STAGING/.background/background.png" 2>/dev/null || true
-cp "$SENSIBLEFOX_ICON" "$STAGING/.VolumeIcon.icns"
-/usr/bin/SetFile -a C "$STAGING" 2>/dev/null || true
+if [ -f "${SENSIBLEFOX_ICON:-}" ]; then
+    cp "$SENSIBLEFOX_ICON" "$STAGING/.VolumeIcon.icns"
+    /usr/bin/SetFile -a C "$STAGING" 2>/dev/null || true
+else
+    echo "  (no volume icon — SENSIBLEFOX_ICON=none)"
+fi
 
 echo "  → Creating SensibleFox.dmg..."
 RW_DMG="$DIST_DIR/.SensibleFox-rw.dmg"
@@ -310,5 +317,7 @@ echo "      • Enterprise policies (distribution/policies.json)"
 echo "      • Autoconfig prefs (sensiblefox.cfg → defaultPref)"
 echo "      • CSS injection (autoconfig → Resources/sensiblefox/)"
 echo "      • Ctrl/Cmd+Shift+A → tab search (autoconfig → sensiblefox.cfg)"
-echo "      • Custom SensibleFox icon (baked into bundle)"
+if [ "${SENSIBLEFOX_ICON:-}" != "none" ]; then
+    echo "      • Custom SensibleFox icon (baked into bundle)"
+fi
 echo "      • uBlock Origin (distribution/extensions/)"

@@ -6,6 +6,7 @@
     "DisablePocket": true,
     "DisableFirefoxAccounts": true,
     "DontCheckDefaultBrowser": true,
+    "ManualAppUpdateOnly": true,
     "FirefoxHome": {
       "Search": true,
       "TopSites": false,
