@@ -3096,6 +3096,12 @@ user_pref("browser.tabs.splitView.enabled", false);
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.warnOnQuitShortcut", false);
 user_pref("browser.warnOnQuit", false);
+// SESSION — always start fresh, never restore, never ask.
+// (browser.startup.page=1 above already opens the homepage, not the last
+// session, on normal launch; this covers the crash path too.)
+// • resume_from_crash=false: after a crash, start a new session instead of
+//   restoring — or offering to restore — the crashed one.
+user_pref("browser.sessionstore.resume_from_crash", false);
 user_pref("browser.tabs.hoverPreview.enabled", true);
 user_pref("browser.tabs.hoverPreview.showThumbnails", true);
 // Tab groups + workspace-like placement (new tabs open next to current,
@@ -3179,6 +3185,18 @@ user_pref("browser.settings-redesign.promo.dismissed", true);
 // FORM HISTORY — disabled (replaces DisableFormHistory policy)
 // ═══════════════════════════════════════════
 user_pref("browser.formfill.enable", false);
+
+// ═══════════════════════════════════════════
+// PRINT — single-line header, no footer duplication
+// The header carries everything (date, page x/y, title, URL), so the
+// other slots are blanked. Note: printers you've already used keep
+// per-printer print.<name>.* prefs; these globals set the defaults.
+// ═══════════════════════════════════════════
+user_pref("print.print_headerleft", "&D - &T (&U)");
+user_pref("print.print_headercenter", "");
+user_pref("print.print_headerright", "&PT");
+user_pref("print.print_footerleft", "");
+user_pref("print.print_footerright", "");
 
 // ═══════════════════════════════════════════
 // MISC UX — polish
@@ -3293,6 +3311,10 @@ user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
 user_pref("browser.download.panel.shown", true);
 user_pref("network.trr.display_fallback_warning", false);
 user_pref("network.trr_ui.show_fallback_warning_option", false);
+// • disable_window_open_feature.location=true: popups can never hide the
+//   address bar — location=no in window.open() is ignored. Default since
+//   FF3 (bug 337344); pinned so it stays that way.
+user_pref("dom.disable_window_open_feature.location", true);
 
 // ═══════════════════════════════════════════
 // UPDATES — fully manual, zero notices
