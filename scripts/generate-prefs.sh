@@ -96,6 +96,10 @@ user_pref("media.webvtt.debug.logging", false);
 user_pref("media.webvtt.testing.events", false);
 user_pref("browser.contentblocking.database.enabled", false);
 user_pref("browser.contentblocking.cfr-milestone.enabled", false);
+// • protections_panel.infoMessage.seen=true: never render the purple
+//   "on guard" info card at the top of the shield popup (CSS hides the
+//   container too, belt-and-braces).
+user_pref("browser.protections_panel.infoMessage.seen", true);
 user_pref("default-browser-agent.enabled", false);
 user_pref("dom.private-attribution.submission.enabled", false);
 user_pref("toolkit.telemetry.dap_enabled", false);
@@ -415,8 +419,10 @@ user_pref("browser.search.separatePrivateDefault.ui.enabled", false);
 
 // ═══════════════════════════════════════════
 // AI / ML — off (no global toggle exists; each surface disabled separately)
-// Translations stay on: on-device, privacy-preserving.
+// Translations stay on: on-device, privacy-preserving — pinned explicitly
+// so the blanket AI/ML disable below can never swallow them.
 // ═══════════════════════════════════════════
+user_pref("browser.translations.enable", true);
 user_pref("browser.ml.enable", false);
 user_pref("browser.ml.chat.enabled", false);
 user_pref("browser.ml.chat.shortcuts", false);

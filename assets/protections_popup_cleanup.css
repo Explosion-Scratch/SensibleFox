@@ -1,0 +1,21 @@
+/* Hide the "trackers blocked" counter badge and the colorful category icons
+   in the old shield (protections) popup. The on/off toggle, per-category rows,
+   settings, and report buttons keep working. */
+#protections-popup-trackers-blocked-counter-box,
+.protections-popup-category-icon {
+  display: none !important;
+}
+
+/* Hide the purple "on guard" info card at the top of the old popup (also
+   suppressed via browser.protections_panel.infoMessage.seen). */
+#info-message-container {
+  display: none !important;
+}
+
+/* Hide the purple "on guard" card and the "N trackers blocked / See All" box
+   in the current identity (trust) popup. The protection toggle, clear-cookies,
+   and privacy-settings rows keep working. */
+#trustpanel-graphic-section,
+#trustpanel-blocker-section {
+  display: none !important;
+}

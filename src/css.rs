@@ -32,6 +32,10 @@ const MODULES: &[(&str, &str)] = &[
         "context-menu-cleanup.css",
         include_str!("../assets/context_menu_cleanup.css"),
     ),
+    (
+        "protections-popup-cleanup.css",
+        include_str!("../assets/protections_popup_cleanup.css"),
+    ),
 ];
 
 pub fn remove_stale_css_modules(profile_path: &Path) -> Result<usize, String> {
