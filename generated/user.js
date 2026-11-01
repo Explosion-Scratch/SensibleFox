@@ -3132,6 +3132,20 @@ user_pref("browser.download.alwaysOpenPanel", false);
 user_pref("browser.download.manager.showWhenStarting", false);
 user_pref("browser.download.open_pdf_attachments_inline", true);
 user_pref("browser.download.useDownloadDir", true);
+// No prompts, no auto-delete: files download straight to disk and stay there.
+// • enableDeletePrivate=false kills the FF143+ private-browsing keep/delete
+//   prompt (private downloads behave like normal ones).
+// • deletePrivate=false keeps private downloads; deletePrivateChosen=true
+//   marks the choice as already made (belt-and-braces if the feature flips on).
+// • skipConfirmLaunchExecutable=true skips the "open executable?" confirm.
+// • enable_spam_prevention=false never throttles multi-file downloads.
+// • alwaysAsk.force=false: never force the open/save dialog.
+user_pref("browser.download.enableDeletePrivate", false);
+user_pref("browser.download.deletePrivate", false);
+user_pref("browser.download.deletePrivateChosen", true);
+user_pref("browser.download.skipConfirmLaunchExecutable", true);
+user_pref("browser.download.enable_spam_prevention", false);
+user_pref("browser.helperApps.alwaysAsk.force", false);
 user_pref("network.http.response.timeout", 0);
 
 // ═══════════════════════════════════════════
@@ -3269,6 +3283,16 @@ user_pref("browser.tabs.warnOnOpen", false);
 user_pref("browser.sessionstore.warnOnQuit", false);
 user_pref("general.warnOnAboutConfig", false);
 user_pref("browser.aboutConfig.showWarning", false);
+// • security.dialog_enable_delay=0 removes the 1s delay on open/save/
+//   executable confirm dialogs (default 1000ms).
+// • dataSubmissionPolicyBypassNotification=true hides the data-choices infobar.
+// • download.panel.shown=true marks the download-panel intro as seen.
+// • trr fallback warnings off (sensiblefox pins Quad9 DoH; no fallback nag).
+user_pref("security.dialog_enable_delay", 0);
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("browser.download.panel.shown", true);
+user_pref("network.trr.display_fallback_warning", false);
+user_pref("network.trr_ui.show_fallback_warning_option", false);
 
 // ═══════════════════════════════════════════
 // UPDATES — fully manual, zero notices

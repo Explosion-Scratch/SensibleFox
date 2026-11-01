@@ -3135,6 +3135,20 @@ defaultPref("browser.download.alwaysOpenPanel", false);
 defaultPref("browser.download.manager.showWhenStarting", false);
 defaultPref("browser.download.open_pdf_attachments_inline", true);
 defaultPref("browser.download.useDownloadDir", true);
+// No prompts, no auto-delete: files download straight to disk and stay there.
+// • enableDeletePrivate=false kills the FF143+ private-browsing keep/delete
+//   prompt (private downloads behave like normal ones).
+// • deletePrivate=false keeps private downloads; deletePrivateChosen=true
+//   marks the choice as already made (belt-and-braces if the feature flips on).
+// • skipConfirmLaunchExecutable=true skips the "open executable?" confirm.
+// • enable_spam_prevention=false never throttles multi-file downloads.
+// • alwaysAsk.force=false: never force the open/save dialog.
+defaultPref("browser.download.enableDeletePrivate", false);
+defaultPref("browser.download.deletePrivate", false);
+defaultPref("browser.download.deletePrivateChosen", true);
+defaultPref("browser.download.skipConfirmLaunchExecutable", true);
+defaultPref("browser.download.enable_spam_prevention", false);
+defaultPref("browser.helperApps.alwaysAsk.force", false);
 defaultPref("network.http.response.timeout", 0);
 
 // ═══════════════════════════════════════════
@@ -3272,6 +3286,16 @@ defaultPref("browser.tabs.warnOnOpen", false);
 defaultPref("browser.sessionstore.warnOnQuit", false);
 defaultPref("general.warnOnAboutConfig", false);
 defaultPref("browser.aboutConfig.showWarning", false);
+// • security.dialog_enable_delay=0 removes the 1s delay on open/save/
+//   executable confirm dialogs (default 1000ms).
+// • dataSubmissionPolicyBypassNotification=true hides the data-choices infobar.
+// • download.panel.shown=true marks the download-panel intro as seen.
+// • trr fallback warnings off (sensiblefox pins Quad9 DoH; no fallback nag).
+defaultPref("security.dialog_enable_delay", 0);
+defaultPref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+defaultPref("browser.download.panel.shown", true);
+defaultPref("network.trr.display_fallback_warning", false);
+defaultPref("network.trr_ui.show_fallback_warning_option", false);
 
 // ═══════════════════════════════════════════
 // UPDATES — fully manual, zero notices
